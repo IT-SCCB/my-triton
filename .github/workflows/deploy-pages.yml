@@ -1,0 +1,66 @@
+# Deploy สมุดบันทึกเซอร์วิสอ้วนพี (my-triton) แบบ static ขึ้น GitHub Pages
+# URL สุดท้าย: https://it-sccb.github.io/my-triton/
+#
+# หมายเหตุ:
+# - Build นี้ใช้เฉพาะ frontend (Vite) — server.ts / data/maintenance.json
+#   ไม่ได้ถูก deploy (ไม่มีเซิร์ฟเวอร์บน Pages) แอปจึงทำงานโหมด static:
+#   ตอนยังไม่ล็อกอิน ข้อมูลเก็บใน localStorage ของเบราว์เซอร์เครื่องนั้น
+#   ตอนล็อกอินด้วย Google ข้อมูลซิงค์กับ Firestore โดยตรง
+# - VITE_GEMINI_API_KEY (optional) มาจาก GitHub Secrets — ถ้าไม่มี secret
+#   build ก็ต้องผ่าน และปุ่มสแกน OCR จะแสดงข้อความภาษาไทยบอกว่ายังไม่ได้ตั้งค่าคีย์
+#   (ดู DEPLOY_STEPS.md)
+
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: ['main']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: 'pages'
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build static site for GitHub Pages
+        run: npm run build
+        env:
+          VITE_PAGES_BUILD: 'true'
+          # Secret นี้ตั้งหรือไม่ตั้งก็ได้ — ไม่มี secret build ก็ผ่าน
+          VITE_GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY }}
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
