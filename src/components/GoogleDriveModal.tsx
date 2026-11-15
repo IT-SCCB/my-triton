@@ -30,6 +30,7 @@ import {
   parseDriveTextDeterministic,
   type ImportedVehiclePatch,
 } from '../utils/driveParser';
+import { parseDriveFileWithGemini } from '../services/geminiClient';
 import { formatBaht, formatKm, formatThaiDate } from '../utils/maintenance';
 
 interface GoogleDriveModalProps {
@@ -247,24 +248,16 @@ export function GoogleDriveModal({
       }
 
       if (!patch) {
-        const res = await fetch('/api/drive-parse', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fileName: file.name,
-            mimeType: payload.effectiveMimeType,
-            kind: payload.kind,
-            textContent: payload.textContent,
-            base64Data: payload.base64Data,
-          }),
+        // ไฟล์รูปภาพ / PDF หรือข้อความที่ไม่ตรงรูปแบบ ต้องใช้ AI แปลง
+        // (เดิมเรียกผ่าน /api/drive-parse บนเซิร์ฟเวอร์ — ตอนนี้เรียก Gemini ตรงจากเบราว์เซอร์)
+        // ไฟล์ JSON มาตรฐานจะถูก parse แบบ deterministic ข้างบนแล้ว จึงไม่ต้องใช้ AI
+        patch = await parseDriveFileWithGemini({
+          fileName: file.name,
+          mimeType: payload.effectiveMimeType,
+          kind: payload.kind,
+          textContent: payload.textContent,
+          base64Data: payload.base64Data,
         });
-        if (!res.ok) {
-          const errData = (await res.json().catch(() => ({}))) as { error?: string };
-          throw new Error(
-            errData.error ?? 'ไม่สามารถวิเคราะห์โครงสร้างข้อมูลจากไฟล์นี้ได้'
-          );
-        }
-        patch = (await res.json()) as ImportedVehiclePatch;
       }
 
       setPendingConfirmation({ file, patch });
