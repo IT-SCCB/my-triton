@@ -1,6 +1,10 @@
 import { useEffect, useState, type ChangeEvent } from 'react';
 import { Camera, Loader2, ScanLine, X } from 'lucide-react';
 import type { OcrExtractedFuelData } from '../types/maintenance';
+import {
+  extractFuelDataFromImage,
+  hasGeminiKey,
+} from '../services/geminiClient';
 
 interface OcrScannerModalProps {
   isOpen: boolean;
@@ -53,6 +57,14 @@ export function OcrScannerModal({ isOpen, onClose, onExtracted }: OcrScannerModa
       return;
     }
 
+    if (!hasGeminiKey()) {
+      setStatusMsg({
+        type: 'error',
+        text: 'สแกน AI ต้องใช้คีย์ Gemini (VITE_GEMINI_API_KEY) ซึ่งยังไม่ได้ตั้งค่าไว้ในหน้านี้ — กรอกข้อมูลด้วยตัวเองได้เลย',
+      });
+      return;
+    }
+
     setScanning(true);
     setStatusMsg({
       type: 'info',
@@ -60,16 +72,9 @@ export function OcrScannerModal({ isOpen, onClose, onExtracted }: OcrScannerModa
     });
 
     try {
-      const res = await fetch('/api/ocr', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ base64Data, mimeType }),
-      });
-      const body = (await res.json()) as OcrExtractedFuelData & { error?: string };
-      if (!res.ok) {
-        throw new Error(body.error ?? 'สแกนไม่สำเร็จ');
-      }
-      onExtracted(body);
+      // เรียก Gemini ตรงจากเบราว์เซอร์ (เดิมเรียกผ่าน /api/ocr บนเซิร์ฟเวอร์)
+      const extracted = await extractFuelDataFromImage(base64Data, mimeType);
+      onExtracted(extracted);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการสแกนภาพ';
       setStatusMsg({ type: 'error', text: message });
