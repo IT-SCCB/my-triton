@@ -1,0 +1,386 @@
+{
+  "entities": {
+    "VehicleProfile": {
+      "title": "VehicleProfile",
+      "description": "Primary vehicle profile, current odometer, fuel gauge level, and maintenance interval overrides for a user.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Unique vehicle document identifier."
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Firebase Auth UID of the vehicle owner."
+        },
+        "nickname": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Vehicle nickname."
+        },
+        "make": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Vehicle manufacturer."
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Vehicle model name."
+        },
+        "engineSpec": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Engine specification."
+        },
+        "year": {
+          "type": "integer",
+          "description": "Model year."
+        },
+        "tankCapacityLiters": {
+          "type": "number",
+          "description": "Fuel tank capacity in liters."
+        },
+        "fuelPercent": {
+          "type": "integer",
+          "description": "Current fuel gauge percentage (0-100)."
+        },
+        "currentOdometer": {
+          "type": "integer",
+          "description": "Latest vehicle odometer reading in km."
+        },
+        "lastUpdatedDate": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "description": "Gregorian ISO date of the latest odometer update."
+        },
+        "lastUpdatedSource": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Source description of the latest odometer update."
+        },
+        "imageUrl": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Vehicle image path or URL."
+        },
+        "scheduleIntervals": {
+          "type": "object",
+          "description": "Custom maintenance interval overrides in km."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server last-updated timestamp."
+        }
+      },
+      "required": [
+        "id",
+        "ownerId",
+        "nickname",
+        "make",
+        "model",
+        "engineSpec",
+        "year",
+        "tankCapacityLiters",
+        "fuelPercent",
+        "currentOdometer",
+        "lastUpdatedDate",
+        "lastUpdatedSource",
+        "imageUrl",
+        "scheduleIntervals",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ServiceRecord": {
+      "title": "ServiceRecord",
+      "description": "Individual maintenance or repair record for a vehicle.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "vehicleId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "date": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "engine_belt",
+            "fluids",
+            "filters",
+            "brakes_tires",
+            "ac_electrical",
+            "other"
+          ]
+        },
+        "odometer": {
+          "type": "integer"
+        },
+        "partsCost": {
+          "type": "number"
+        },
+        "laborCost": {
+          "type": "number"
+        },
+        "totalCost": {
+          "type": "number"
+        },
+        "intervalKm": {
+          "type": "integer"
+        },
+        "intervalMonths": {
+          "type": "integer"
+        },
+        "scheduleKey": {
+          "type": "string",
+          "enum": [
+            "engine_oil",
+            "air_cabin_filter",
+            "timing_belt",
+            "coolant",
+            "custom"
+          ]
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "revisionNote": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "ownerId",
+        "vehicleId",
+        "date",
+        "title",
+        "category",
+        "odometer",
+        "partsCost",
+        "laborCost",
+        "totalCost",
+        "notes",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "FuelLogEntry": {
+      "title": "FuelLogEntry",
+      "description": "Fuel refill log entry with odometer, liters, cost, and efficiency.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "vehicleId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "date": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "odometer": {
+          "type": "integer"
+        },
+        "distance": {
+          "type": "number"
+        },
+        "amount": {
+          "type": "number"
+        },
+        "liters": {
+          "type": "number"
+        },
+        "pricePerLiter": {
+          "type": "number"
+        },
+        "kml": {
+          "type": "number"
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "ownerId",
+        "vehicleId",
+        "date",
+        "odometer",
+        "distance",
+        "amount",
+        "liters",
+        "pricePerLiter",
+        "kml",
+        "note",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "OdometerLogEntry": {
+      "title": "OdometerLogEntry",
+      "description": "Historical odometer checkpoint log entry.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "vehicleId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "date": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "odometer": {
+          "type": "integer"
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "ownerId",
+        "vehicleId",
+        "date",
+        "odometer",
+        "source",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/vehicles/{vehicleId}": {
+      "schema": {
+        "$ref": "#/entities/VehicleProfile"
+      },
+      "description": "Owner-scoped vehicle profile and schedule interval configuration."
+    },
+    "/users/{userId}/vehicles/{vehicleId}/services/{serviceId}": {
+      "schema": {
+        "$ref": "#/entities/ServiceRecord"
+      },
+      "description": "Maintenance and repair history subcollection for a vehicle."
+    },
+    "/users/{userId}/vehicles/{vehicleId}/fuelLogs/{fuelLogId}": {
+      "schema": {
+        "$ref": "#/entities/FuelLogEntry"
+      },
+      "description": "Fuel refill history subcollection for a vehicle."
+    },
+    "/users/{userId}/vehicles/{vehicleId}/odometerLogs/{odometerLogId}": {
+      "schema": {
+        "$ref": "#/entities/OdometerLogEntry"
+      },
+      "description": "Odometer log checkpoints subcollection for a vehicle."
+    }
+  }
+}

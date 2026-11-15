@@ -1,0 +1,6 @@
+{
+  "name": "สมุดบันทึกเซอร์วิสอ้วนพี — Mitsubishi Triton 2012",
+  "description": "ระบบบันทึกประวัติการเซอร์วิส บำรุงรักษา เลขไมล์ และกำหนดการเปลี่ยนอะไหล่รอบถัดไปสำหรับรถกระบะอ้วนพี (Mitsubishi Triton 2012)",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

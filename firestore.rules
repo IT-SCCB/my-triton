@@ -1,0 +1,444 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net: deny all access by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidDateStr(d) {
+      return d is string && d.size() == 10 && d.matches('^\\d{4}-\\d{2}-\\d{2}$');
+    }
+
+    function isValidScheduleIntervals(m) {
+      return m is map
+        && m.keys().hasOnly(['engine_oil', 'air_cabin_filter', 'coolant', 'timing_belt', 'custom'])
+        && (!('engine_oil' in m) || (m.engine_oil is int && m.engine_oil > 0 && m.engine_oil <= 1000000))
+        && (!('air_cabin_filter' in m) || (m.air_cabin_filter is int && m.air_cabin_filter > 0 && m.air_cabin_filter <= 1000000))
+        && (!('coolant' in m) || (m.coolant is int && m.coolant > 0 && m.coolant <= 1000000))
+        && (!('timing_belt' in m) || (m.timing_belt is int && m.timing_belt > 0 && m.timing_belt <= 1000000))
+        && (!('custom' in m) || (m.custom is int && m.custom > 0 && m.custom <= 1000000));
+    }
+
+    function isValidVehicle(data, userId, vehicleId) {
+      return data.keys().hasAll([
+          'id',
+          'ownerId',
+          'nickname',
+          'make',
+          'model',
+          'engineSpec',
+          'year',
+          'tankCapacityLiters',
+          'fuelPercent',
+          'currentOdometer',
+          'lastUpdatedDate',
+          'lastUpdatedSource',
+          'imageUrl',
+          'scheduleIntervals',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'ownerId',
+          'nickname',
+          'make',
+          'model',
+          'engineSpec',
+          'year',
+          'tankCapacityLiters',
+          'fuelPercent',
+          'currentOdometer',
+          'lastUpdatedDate',
+          'lastUpdatedSource',
+          'imageUrl',
+          'scheduleIntervals',
+          'createdAt',
+          'updatedAt'
+        ])
+        && isValidId(data.id)
+        && data.id == vehicleId
+        && isValidId(data.ownerId)
+        && data.ownerId == userId
+        && data.ownerId == request.auth.uid
+        && data.nickname is string && data.nickname.size() >= 1 && data.nickname.size() <= 80
+        && data.make is string && data.make.size() >= 1 && data.make.size() <= 80
+        && data.model is string && data.model.size() >= 1 && data.model.size() <= 80
+        && data.engineSpec is string && data.engineSpec.size() >= 1 && data.engineSpec.size() <= 80
+        && data.year is int && data.year >= 1950 && data.year <= 2100
+        && data.tankCapacityLiters is number && data.tankCapacityLiters > 0 && data.tankCapacityLiters <= 500
+        && data.fuelPercent is int && data.fuelPercent >= 0 && data.fuelPercent <= 100
+        && data.currentOdometer is int && data.currentOdometer > 0 && data.currentOdometer <= 2000000
+        && isValidDateStr(data.lastUpdatedDate)
+        && data.lastUpdatedSource is string && data.lastUpdatedSource.size() >= 1 && data.lastUpdatedSource.size() <= 200
+        && data.imageUrl is string && data.imageUrl.size() >= 1 && data.imageUrl.size() <= 500
+        && isValidScheduleIntervals(data.scheduleIntervals)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidService(data, userId, vehicleId, serviceId) {
+      return data.keys().hasAll([
+          'id',
+          'ownerId',
+          'vehicleId',
+          'date',
+          'title',
+          'category',
+          'odometer',
+          'partsCost',
+          'laborCost',
+          'totalCost',
+          'notes',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'ownerId',
+          'vehicleId',
+          'date',
+          'title',
+          'category',
+          'odometer',
+          'partsCost',
+          'laborCost',
+          'totalCost',
+          'intervalKm',
+          'intervalMonths',
+          'scheduleKey',
+          'notes',
+          'revisionNote',
+          'createdAt',
+          'updatedAt'
+        ])
+        && isValidId(data.id)
+        && data.id == serviceId
+        && isValidId(data.ownerId)
+        && data.ownerId == userId
+        && data.ownerId == request.auth.uid
+        && isValidId(data.vehicleId)
+        && data.vehicleId == vehicleId
+        && isValidDateStr(data.date)
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 200
+        && data.category in ['engine_belt', 'fluids', 'filters', 'brakes_tires', 'ac_electrical', 'other']
+        && data.odometer is int && data.odometer > 0 && data.odometer <= 2000000
+        && data.partsCost is number && data.partsCost >= 0 && data.partsCost <= 10000000
+        && data.laborCost is number && data.laborCost >= 0 && data.laborCost <= 10000000
+        && data.totalCost is number && data.totalCost >= 0 && data.totalCost <= 20000000
+        && (!('intervalKm' in data) || data.intervalKm == null || (data.intervalKm is int && data.intervalKm > 0 && data.intervalKm <= 1000000))
+        && (!('intervalMonths' in data) || data.intervalMonths == null || (data.intervalMonths is int && data.intervalMonths > 0 && data.intervalMonths <= 600))
+        && (!('scheduleKey' in data) || data.scheduleKey == null || data.scheduleKey in ['engine_oil', 'air_cabin_filter', 'timing_belt', 'coolant', 'custom'])
+        && data.notes is string && data.notes.size() <= 1000
+        && (!('revisionNote' in data) || data.revisionNote == null || (data.revisionNote is string && data.revisionNote.size() <= 500))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidFuelLog(data, userId, vehicleId, fuelLogId) {
+      return data.keys().hasAll([
+          'id',
+          'ownerId',
+          'vehicleId',
+          'date',
+          'odometer',
+          'distance',
+          'amount',
+          'liters',
+          'pricePerLiter',
+          'kml',
+          'note',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'ownerId',
+          'vehicleId',
+          'date',
+          'odometer',
+          'distance',
+          'amount',
+          'liters',
+          'pricePerLiter',
+          'kml',
+          'note',
+          'createdAt',
+          'updatedAt'
+        ])
+        && isValidId(data.id)
+        && data.id == fuelLogId
+        && isValidId(data.ownerId)
+        && data.ownerId == userId
+        && data.ownerId == request.auth.uid
+        && isValidId(data.vehicleId)
+        && data.vehicleId == vehicleId
+        && isValidDateStr(data.date)
+        && data.odometer is int && data.odometer > 0 && data.odometer <= 2000000
+        && data.distance is number && data.distance >= 0 && data.distance <= 500000
+        && data.amount is number && data.amount > 0 && data.amount <= 1000000
+        && data.liters is number && data.liters > 0 && data.liters <= 10000
+        && data.pricePerLiter is number && data.pricePerLiter >= 0 && data.pricePerLiter <= 10000
+        && data.kml is number && data.kml >= 0 && data.kml <= 500
+        && data.note is string && data.note.size() >= 1 && data.note.size() <= 300
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidOdometerLog(data, userId, vehicleId, odometerLogId) {
+      return data.keys().hasAll([
+          'id',
+          'ownerId',
+          'vehicleId',
+          'date',
+          'odometer',
+          'source',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'ownerId',
+          'vehicleId',
+          'date',
+          'odometer',
+          'source',
+          'note',
+          'createdAt',
+          'updatedAt'
+        ])
+        && isValidId(data.id)
+        && data.id == odometerLogId
+        && isValidId(data.ownerId)
+        && data.ownerId == userId
+        && data.ownerId == request.auth.uid
+        && isValidId(data.vehicleId)
+        && data.vehicleId == vehicleId
+        && isValidDateStr(data.date)
+        && data.odometer is int && data.odometer > 0 && data.odometer <= 2000000
+        && data.source is string && data.source.size() >= 1 && data.source.size() <= 200
+        && (!('note' in data) || data.note == null || (data.note is string && data.note.size() <= 500))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    match /users/{userId}/vehicles/{vehicleId} {
+      allow get: if isValidId(userId) && isValidId(vehicleId) && isOwner(userId) && (resource == null || existing().ownerId == request.auth.uid);
+      allow list: if isValidId(userId) && isOwner(userId) && existing().ownerId == request.auth.uid;
+
+      allow create: if isValidId(userId)
+        && isValidId(vehicleId)
+        && isVerifiedUser()
+        && isOwner(userId)
+        && isValidVehicle(incoming(), userId, vehicleId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(userId)
+        && isValidId(vehicleId)
+        && isVerifiedUser()
+        && isOwner(userId)
+        && isValidVehicle(incoming(), userId, vehicleId)
+        && incoming().id == existing().id
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Action: Update Odometer
+          incoming().diff(existing()).affectedKeys().hasOnly(['currentOdometer', 'lastUpdatedDate', 'lastUpdatedSource', 'updatedAt'])
+          // Action: Update Fuel Gauge
+          || incoming().diff(existing()).affectedKeys().hasOnly(['fuelPercent', 'updatedAt'])
+          // Action: Update Schedule Intervals
+          || incoming().diff(existing()).affectedKeys().hasOnly(['scheduleIntervals', 'updatedAt'])
+          // Action: Full Sync / Cloud Import
+          || incoming().diff(existing()).affectedKeys().hasOnly([
+            'currentOdometer',
+            'lastUpdatedDate',
+            'lastUpdatedSource',
+            'fuelPercent',
+            'scheduleIntervals',
+            'nickname',
+            'make',
+            'model',
+            'engineSpec',
+            'year',
+            'tankCapacityLiters',
+            'imageUrl',
+            'updatedAt'
+          ])
+        );
+
+      allow delete: if isValidId(userId)
+        && isValidId(vehicleId)
+        && isVerifiedUser()
+        && isOwner(userId)
+        && existing().ownerId == request.auth.uid;
+
+      match /services/{serviceId} {
+        allow get: if isValidId(userId) && isValidId(vehicleId) && isValidId(serviceId) && isOwner(userId) && (resource == null || existing().ownerId == request.auth.uid);
+        allow list: if isValidId(userId) && isValidId(vehicleId) && isOwner(userId) && existing().ownerId == request.auth.uid;
+
+        allow create: if isValidId(userId)
+          && isValidId(vehicleId)
+          && isValidId(serviceId)
+          && isVerifiedUser()
+          && isOwner(userId)
+          && isValidService(incoming(), userId, vehicleId, serviceId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && getAfter(/databases/$(database)/documents/users/$(userId)/vehicles/$(vehicleId)).data.ownerId == request.auth.uid;
+
+        allow update: if isValidId(userId)
+          && isValidId(vehicleId)
+          && isValidId(serviceId)
+          && isVerifiedUser()
+          && isOwner(userId)
+          && isValidService(incoming(), userId, vehicleId, serviceId)
+          && incoming().id == existing().id
+          && incoming().ownerId == existing().ownerId
+          && incoming().vehicleId == existing().vehicleId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && get(/databases/$(database)/documents/users/$(userId)/vehicles/$(vehicleId)).data.ownerId == request.auth.uid
+          && (
+            // Action: Edit Service Record
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'date',
+              'title',
+              'category',
+              'odometer',
+              'partsCost',
+              'laborCost',
+              'totalCost',
+              'intervalKm',
+              'intervalMonths',
+              'scheduleKey',
+              'notes',
+              'revisionNote',
+              'updatedAt'
+            ])
+            // Action: Reset Maintenance Cycle
+            || incoming().diff(existing()).affectedKeys().hasOnly(['date', 'odometer', 'revisionNote', 'updatedAt'])
+          );
+
+        allow delete: if isValidId(userId)
+          && isValidId(vehicleId)
+          && isValidId(serviceId)
+          && isVerifiedUser()
+          && isOwner(userId)
+          && existing().ownerId == request.auth.uid
+          && get(/databases/$(database)/documents/users/$(userId)/vehicles/$(vehicleId)).data.ownerId == request.auth.uid;
+      }
+
+      match /fuelLogs/{fuelLogId} {
+        allow get: if isValidId(userId) && isValidId(vehicleId) && isValidId(fuelLogId) && isOwner(userId) && (resource == null || existing().ownerId == request.auth.uid);
+        allow list: if isValidId(userId) && isValidId(vehicleId) && isOwner(userId) && existing().ownerId == request.auth.uid;
+
+        allow create: if isValidId(userId)
+          && isValidId(vehicleId)
+          && isValidId(fuelLogId)
+          && isVerifiedUser()
+          && isOwner(userId)
+          && isValidFuelLog(incoming(), userId, vehicleId, fuelLogId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && getAfter(/databases/$(database)/documents/users/$(userId)/vehicles/$(vehicleId)).data.ownerId == request.auth.uid;
+
+        allow update: if isValidId(userId)
+          && isValidId(vehicleId)
+          && isValidId(fuelLogId)
+          && isVerifiedUser()
+          && isOwner(userId)
+          && isValidFuelLog(incoming(), userId, vehicleId, fuelLogId)
+          && incoming().id == existing().id
+          && incoming().ownerId == existing().ownerId
+          && incoming().vehicleId == existing().vehicleId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && get(/databases/$(database)/documents/users/$(userId)/vehicles/$(vehicleId)).data.ownerId == request.auth.uid
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'date',
+            'odometer',
+            'distance',
+            'amount',
+            'liters',
+            'pricePerLiter',
+            'kml',
+            'note',
+            'updatedAt'
+          ]);
+
+        allow delete: if isValidId(userId)
+          && isValidId(vehicleId)
+          && isValidId(fuelLogId)
+          && isVerifiedUser()
+          && isOwner(userId)
+          && existing().ownerId == request.auth.uid
+          && get(/databases/$(database)/documents/users/$(userId)/vehicles/$(vehicleId)).data.ownerId == request.auth.uid;
+      }
+
+      match /odometerLogs/{odometerLogId} {
+        allow get: if isValidId(userId) && isValidId(vehicleId) && isValidId(odometerLogId) && isOwner(userId) && (resource == null || existing().ownerId == request.auth.uid);
+        allow list: if isValidId(userId) && isValidId(vehicleId) && isOwner(userId) && existing().ownerId == request.auth.uid;
+
+        allow create: if isValidId(userId)
+          && isValidId(vehicleId)
+          && isValidId(odometerLogId)
+          && isVerifiedUser()
+          && isOwner(userId)
+          && isValidOdometerLog(incoming(), userId, vehicleId, odometerLogId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && getAfter(/databases/$(database)/documents/users/$(userId)/vehicles/$(vehicleId)).data.ownerId == request.auth.uid;
+
+        allow update: if isValidId(userId)
+          && isValidId(vehicleId)
+          && isValidId(odometerLogId)
+          && isVerifiedUser()
+          && isOwner(userId)
+          && isValidOdometerLog(incoming(), userId, vehicleId, odometerLogId)
+          && incoming().id == existing().id
+          && incoming().ownerId == existing().ownerId
+          && incoming().vehicleId == existing().vehicleId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && get(/databases/$(database)/documents/users/$(userId)/vehicles/$(vehicleId)).data.ownerId == request.auth.uid
+          && incoming().diff(existing()).affectedKeys().hasOnly(['date', 'odometer', 'source', 'note', 'updatedAt']);
+
+        allow delete: if isValidId(userId)
+          && isValidId(vehicleId)
+          && isValidId(odometerLogId)
+          && isVerifiedUser()
+          && isOwner(userId)
+          && existing().ownerId == request.auth.uid
+          && get(/databases/$(database)/documents/users/$(userId)/vehicles/$(vehicleId)).data.ownerId == request.auth.uid;
+      }
+    }
+  }
+}

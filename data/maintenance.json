@@ -1,0 +1,175 @@
+{
+  "vehicle": {
+    "id": "ouanpee-triton-2012",
+    "nickname": "อ้วนพี",
+    "make": "Mitsubishi",
+    "model": "Triton 2012",
+    "engineSpec": "2.5 DI-D",
+    "year": 2012,
+    "tankCapacityLiters": 75,
+    "fuelPercent": 55,
+    "currentOdometer": 233850,
+    "lastUpdatedDate": "2026-11-15",
+    "lastUpdatedSource": "อัปเดตผ่านเว็บลิงก์",
+    "imageUrl": "/src/assets/images/triton_2012_pickup_1794729642461.jpg"
+  },
+  "scheduleIntervals": {
+    "engine_oil": 10000,
+    "air_cabin_filter": 10000,
+    "coolant": 40000,
+    "timing_belt": 100000
+  },
+  "fuelLogs": [
+    {
+      "id": "fuel-1",
+      "date": "2026-10-30",
+      "odometer": 233589,
+      "distance": 590,
+      "amount": 500,
+      "liters": 11.74,
+      "pricePerLiter": 42.59,
+      "kml": 8.34,
+      "note": "เติมน้ำมัน (ดีเซล)"
+    },
+    {
+      "id": "fuel-2",
+      "date": "2026-11-01",
+      "odometer": 233661,
+      "distance": 72,
+      "amount": 1000,
+      "liters": 29.806,
+      "pricePerLiter": 33.55,
+      "kml": 13.39,
+      "note": "Esso (ดีเซล B20)"
+    },
+    {
+      "id": "fuel-3",
+      "date": "2026-11-09",
+      "odometer": 233850,
+      "distance": 189,
+      "amount": 1200,
+      "liters": 35.768,
+      "pricePerLiter": 33.55,
+      "kml": 16.27,
+      "note": "บางจาก กม.22 (ดีเซล B20)"
+    }
+  ],
+  "services": [
+    {
+      "id": "srv-20261109-ac-gas",
+      "date": "2026-11-09",
+      "title": "ระบบแอร์: ตรวจเช็กและเติมน้ำยาแอร์เพิ่ม",
+      "category": "ac_electrical",
+      "odometer": 233850,
+      "partsCost": 400,
+      "laborCost": 0,
+      "totalCost": 400,
+      "intervalKm": null,
+      "intervalMonths": null,
+      "notes": "ตรวจเช็กตามอาการ (ไม่มีรอบระยะตายตัว)"
+    },
+    {
+      "id": "srv-20260914-timing-belt",
+      "date": "2026-09-14",
+      "title": "เปลี่ยนชุดสายพานไทม์มิ่ง (สายพานราวลิ้น + สายพานปั๊ม)",
+      "category": "engine_belt",
+      "odometer": 233589,
+      "partsCost": 2850,
+      "laborCost": 700,
+      "totalCost": 3550,
+      "intervalKm": 100000,
+      "intervalMonths": 60,
+      "scheduleKey": "timing_belt",
+      "notes": "ค่าอะไหล่ 2,850 บาท + ค่าแรง 700 บาท · รอบถัดไปครบ 100,000 กม. หรือประมาณ 5 ปี",
+      "revisionNote": "[15 พ.ย. 2569] แก้ไขเลขไมล์เซอร์วิสจาก 223,589 กม. เป็น 233,589 กม. (รอบถัดไป 333,589 กม.)"
+    },
+    {
+      "id": "srv-20260914-engine-oil",
+      "date": "2026-09-14",
+      "title": "เปลี่ยนถ่ายน้ำมันเครื่อง",
+      "category": "fluids",
+      "odometer": 233589,
+      "partsCost": 1250,
+      "laborCost": 0,
+      "totalCost": 1250,
+      "intervalKm": 10000,
+      "intervalMonths": 6,
+      "scheduleKey": "engine_oil",
+      "notes": "เปลี่ยนตามระยะมาตรฐานทุกๆ 5,000 – 10,000 กม.",
+      "revisionNote": "[15 พ.ย. 2569] แก้ไขเลขไมล์เซอร์วิสจาก 223,589 กม. เป็น 233,589 กม. (รอบถัดไป 243,589 กม.)"
+    },
+    {
+      "id": "srv-20260914-filters",
+      "date": "2026-09-14",
+      "title": "เปลี่ยนกรองอากาศเครื่องยนต์และกรองแอร์",
+      "category": "filters",
+      "odometer": 233589,
+      "partsCost": 0,
+      "laborCost": 0,
+      "totalCost": 0,
+      "intervalKm": 10000,
+      "intervalMonths": 12,
+      "scheduleKey": "air_cabin_filter",
+      "notes": "อิงรอบเดียวกับชุดสายพานและน้ำมันเครื่อง (ไม่ระบุค่าใช้จ่ายแยก)",
+      "revisionNote": "[15 พ.ย. 2569] แก้ไขเลขไมล์เซอร์วิสจาก 223,589 กม. เป็น 233,589 กม. (รอบถัดไป 243,589 กม.)"
+    },
+    {
+      "id": "srv-20260929-coolant-blue",
+      "date": "2026-09-29",
+      "title": "เปลี่ยนถ่ายน้ำยาหล่อเย็น (Coolant) สีฟ้า",
+      "category": "fluids",
+      "odometer": 231895,
+      "partsCost": 0,
+      "laborCost": 0,
+      "totalCost": 0,
+      "intervalKm": 40000,
+      "intervalMonths": 24,
+      "scheduleKey": "coolant",
+      "notes": "เปลี่ยนถ่ายน้ำยาหล่อเย็น (Coolant) สีฟ้า ที่เลขไมล์ 231,895 กม. (และอิงรอบแรก 14 ก.ย. 2569)"
+    }
+  ],
+  "odometerLogs": [
+    {
+      "id": "odo-20261115-weblink",
+      "date": "2026-11-15",
+      "odometer": 233850,
+      "source": "อัปเดตผ่านเว็บลิงก์",
+      "note": "เลขไมล์ล่าสุดหลังแก้ไขข้อมูลวันที่ 15 พ.ย. 2569"
+    },
+    {
+      "id": "odo-20261109-fuel",
+      "date": "2026-11-09",
+      "odometer": 233850,
+      "source": "เติมน้ำมันบางจาก กม.22 + เติมน้ำยาแอร์",
+      "note": "เติม 1,200 บาท (35.768 ลิตร) และตรวจเช็กแอร์ 400 บาท"
+    },
+    {
+      "id": "odo-20261101-fuel",
+      "date": "2026-11-01",
+      "odometer": 233661,
+      "source": "เติมน้ำมัน Esso (ดีเซล B20)",
+      "note": "เติม 1,000 บาท (29.806 ลิตร)"
+    },
+    {
+      "id": "odo-20261030-fuel",
+      "date": "2026-10-30",
+      "odometer": 233589,
+      "source": "เติมน้ำมัน (ดีเซล) / หน้าปัด",
+      "note": "เติม 500 บาท (11.74 ลิตร)"
+    },
+    {
+      "id": "odo-20260929-coolant",
+      "date": "2026-09-29",
+      "odometer": 231895,
+      "source": "บันทึกเซอร์วิส Coolant สีฟ้า",
+      "note": "บันทึกขณะเปลี่ยนถ่ายน้ำยาหล่อเย็นสีฟ้า"
+    },
+    {
+      "id": "odo-20260914-service",
+      "date": "2026-09-14",
+      "odometer": 233589,
+      "source": "บันทึกเซอร์วิสใหญ่",
+      "note": "แก้ไขจาก 223,589 กม. เป็น 233,589 กม. เมื่อวันที่ 15 พ.ย. 2569"
+    }
+  ]
+}
