@@ -16,7 +16,8 @@ import { ServiceHistoryTable } from './components/ServiceHistoryTable';
 import { StatusBanner } from './components/StatusBanner';
 import { TopBar, type ActiveTab } from './components/TopBar';
 import { VehicleHero } from './components/VehicleHero';
-import { SEED_VEHICLE_STATE } from './data/seedData';
+import { SEED_VEHICLE_STATE, normalizeVehicleImageUrl } from './data/seedData';
+import { apiFetch } from './utils/serverApi';
 import firebaseConfig from '../firebase-applet-config.json';
 import {
   ensureSeededAndSubscribeToVehicle,
@@ -98,6 +99,56 @@ function isIdenticalToSeed(candidate: VehicleMaintenanceState): boolean {
   );
 }
 
+/**
+ * แปลง imageUrl เก่า ('/src/assets/images/...') ที่อาจค้างอยู่ใน
+ * localStorage / Firestore ให้เป็น URL รูปที่ build ปัจจุบันโหลดได้จริง
+ * (เช่น /my-triton/assets/... บน GitHub Pages)
+ */
+function normalizeState(state: VehicleMaintenanceState): VehicleMaintenanceState {
+  const fixedUrl = normalizeVehicleImageUrl(state.vehicle.imageUrl);
+  if (fixedUrl === state.vehicle.imageUrl) return state;
+  return { ...state, vehicle: { ...state.vehicle, imageUrl: fixedUrl } };
+}
+
+/**
+ * แปลงข้อมูลที่ดึงมาจาก Google Sheets ให้เป็น VehicleMaintenanceState
+ * logic เดียวกับ POST /api/sync-import ใน server.ts
+ * (GAS push ส่ง { odometer, fuelPercent, fuelLogs, maintenanceItems, fullState })
+ */
+function normalizeCloudState(
+  current: VehicleMaintenanceState,
+  cloudData: unknown
+): VehicleMaintenanceState {
+  const data = cloudData as Partial<VehicleMaintenanceState> & {
+    odometer?: number;
+    fuelPercent?: number;
+    fullState?: VehicleMaintenanceState;
+  };
+  if (
+    data &&
+    data.fullState &&
+    data.fullState.vehicle &&
+    Array.isArray(data.fullState.services)
+  ) {
+    return data.fullState;
+  }
+  if (typeof data?.odometer === 'number' && Array.isArray(data.fuelLogs)) {
+    return {
+      ...current,
+      vehicle: {
+        ...current.vehicle,
+        currentOdometer: data.odometer,
+        fuelPercent:
+          typeof data.fuelPercent === 'number'
+            ? data.fuelPercent
+            : current.vehicle.fuelPercent,
+      },
+      fuelLogs: data.fuelLogs,
+    };
+  }
+  throw new Error('ไม่พบโครงสร้างข้อมูลที่รองรับจาก Google Sheets');
+}
+
 function formatCloudErrorMessage(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err);
   if (raw.includes('Quota exceeded')) {
@@ -112,7 +163,7 @@ function formatCloudErrorMessage(err: unknown): string {
 
 export default function App() {
   const [state, setState] = useState<VehicleMaintenanceState>(() => {
-    return readCachedLocalState() ?? SEED_VEHICLE_STATE;
+    return normalizeState(readCachedLocalState() ?? SEED_VEHICLE_STATE);
   });
 
   const latestStateRef = useRef(state);
@@ -156,9 +207,10 @@ export default function App() {
   }
 
   function commitState(next: VehicleMaintenanceState) {
-    setState(next);
+    const fixed = normalizeState(next);
+    setState(fixed);
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(fixed));
     } catch {
       // Ignore storage errors
     }
@@ -180,7 +232,7 @@ export default function App() {
     if (!authUser) {
       setCloudSyncStatus('local');
       setCloudSyncError(null);
-      fetch('/api/maintenance')
+      apiFetch('/api/maintenance')
         .then((res) => {
           if (!res.ok) throw new Error('Network error');
           return res.json() as Promise<VehicleMaintenanceState>;
@@ -191,7 +243,7 @@ export default function App() {
           // Protect local edits if the ephemeral server container reset back to seed data
           if (localCached && isIdenticalToSeed(remoteState) && !isIdenticalToSeed(localCached)) {
             setState(localCached);
-            void fetch('/api/sync-import', {
+            void apiFetch('/api/sync-import', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ fullState: localCached }),
@@ -220,7 +272,7 @@ export default function App() {
       let initialFallback = latestStateRef.current;
       if (isIdenticalToSeed(initialFallback)) {
         try {
-          const res = await fetch('/api/maintenance');
+          const res = await apiFetch('/api/maintenance');
           if (res.ok) {
             const serverState = (await res.json()) as VehicleMaintenanceState;
             if (!isIdenticalToSeed(serverState)) {
@@ -242,7 +294,7 @@ export default function App() {
           setCloudSyncStatus('synced');
           setCloudSyncError(null);
           setLoading(false);
-          void fetch('/api/sync-import', {
+          void apiFetch('/api/sync-import', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ fullState: remoteState }),
@@ -302,7 +354,7 @@ export default function App() {
       }
     }
     try {
-      const res = await fetch('/api/fuel-gauge', {
+      const res = await apiFetch('/api/fuel-gauge', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fuelPercent }),
@@ -333,7 +385,7 @@ export default function App() {
       }
     }
     try {
-      const res = await fetch('/api/odometer', {
+      const res = await apiFetch('/api/odometer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -405,7 +457,7 @@ export default function App() {
       }
 
       try {
-        const res = await fetch(`/api/fuel-logs/${payload.id}`, {
+        const res = await apiFetch(`/api/fuel-logs/${payload.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(updatedEntry),
@@ -453,7 +505,7 @@ export default function App() {
     }
 
     try {
-      const res = await fetch('/api/fuel-logs', {
+      const res = await apiFetch('/api/fuel-logs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -487,7 +539,7 @@ export default function App() {
       }
     }
     try {
-      const res = await fetch(`/api/fuel-logs/${id}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/fuel-logs/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to delete fuel log');
       const next = (await res.json()) as VehicleMaintenanceState;
       commitState(next);
@@ -544,7 +596,7 @@ export default function App() {
 
     if (payload.id) {
       try {
-        const res = await fetch(`/api/services/${payload.id}`, {
+        const res = await apiFetch(`/api/services/${payload.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -571,7 +623,7 @@ export default function App() {
     }
 
     try {
-      const res = await fetch('/api/services', {
+      const res = await apiFetch('/api/services', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -605,7 +657,7 @@ export default function App() {
       }
     }
     try {
-      const res = await fetch(`/api/services/${serviceId}/reset-cycle`, {
+      const res = await apiFetch(`/api/services/${serviceId}/reset-cycle`, {
         method: 'POST',
       });
       if (!res.ok) throw new Error('Failed to reset cycle');
@@ -638,7 +690,7 @@ export default function App() {
       }
     }
     try {
-      const res = await fetch(`/api/services/${id}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/services/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to delete');
       const next = (await res.json()) as VehicleMaintenanceState;
       commitState(next);
@@ -664,7 +716,7 @@ export default function App() {
       }
     }
     try {
-      const res = await fetch(`/api/schedules/${key}`, {
+      const res = await apiFetch(`/api/schedules/${key}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ intervalKm }),
@@ -681,16 +733,9 @@ export default function App() {
   }
 
   async function handleImportCloudState(cloudPayload: unknown) {
-    const res = await fetch('/api/sync-import', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(cloudPayload),
-    });
-    if (!res.ok) {
-      const err = (await res.json()) as { error?: string };
-      throw new Error(err.error ?? 'นำเข้าข้อมูลไม่สำเร็จ');
-    }
-    const next = (await res.json()) as VehicleMaintenanceState;
+    // แปลงข้อมูลจาก Sheets ฝั่ง client โดยตรง (logic เดียวกับ /api/sync-import)
+    // โหมด GitHub Pages ไม่มีเซิร์ฟเวอร์ จึงไม่เรียก /api อีก
+    const next = normalizeCloudState(state, cloudPayload);
     if (authUser) {
       try {
         await fsCreateOrResetVehicleWithBatch(authUser.uid, state, next);
@@ -699,6 +744,12 @@ export default function App() {
       }
     }
     commitState(next);
+    // Best-effort: ซิงค์สำเนาเซิร์ฟเวอร์ด้วยเมื่อมีเซิร์ฟเวอร์ (no-op บน Pages)
+    void apiFetch('/api/sync-import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fullState: next }),
+    }).catch(() => {});
   }
 
   async function handleApplyDrivePatch(patch: ImportedVehiclePatch) {
@@ -707,7 +758,7 @@ export default function App() {
       try {
         await fsCreateOrResetVehicleWithBatch(authUser.uid, state, next);
         commitState(next);
-        void fetch('/api/sync-import', {
+        void apiFetch('/api/sync-import', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ fullState: next }),
@@ -719,7 +770,7 @@ export default function App() {
     }
 
     try {
-      const res = await fetch('/api/drive-apply', {
+      const res = await apiFetch('/api/drive-apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ patch }),
@@ -744,7 +795,7 @@ export default function App() {
       }
     }
     try {
-      const res = await fetch('/api/reset', { method: 'POST' });
+      const res = await apiFetch('/api/reset', { method: 'POST' });
       if (!res.ok) throw new Error('Failed to reset');
       const next = (await res.json()) as VehicleMaintenanceState;
       commitState(next);
