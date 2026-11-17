@@ -13,15 +13,16 @@ import { OdometerLogView } from './components/OdometerLogView';
 import { ScheduleSection } from './components/ScheduleSection';
 import { ServiceFormModal } from './components/ServiceFormModal';
 import { ServiceHistoryTable } from './components/ServiceHistoryTable';
+import { SheetsSyncStatusBadge } from './components/SheetsSyncStatusBadge';
 import { StatusBanner } from './components/StatusBanner';
 import { TopBar, type ActiveTab } from './components/TopBar';
 import { VehicleHero } from './components/VehicleHero';
-import { SEED_VEHICLE_STATE, normalizeVehicleImageUrl } from './data/seedData';
-import { apiFetch } from './utils/serverApi';
+import { normalizeVehicleImageUrl, SEED_VEHICLE_STATE } from './data/seedData';
 import firebaseConfig from '../firebase-applet-config.json';
 import {
   ensureSeededAndSubscribeToVehicle,
   fsAddFuelLog,
+  fsBatchUpdateFuelLogs,
   fsCreateOrResetVehicleWithBatch,
   fsDeleteFuelLog,
   fsDeleteService,
@@ -38,6 +39,18 @@ import {
   subscribeAuthUser,
   testFirestoreConnection,
 } from './services/googleAuth';
+import {
+  isValidGasWebhookUrl,
+  loadGasAutoSyncEnabled,
+  loadGasLastSyncAt,
+  loadSavedGasWebhookUrl,
+  pullFromGoogleSheets,
+  pushToGoogleSheets,
+  saveGasAutoSyncEnabled,
+  saveGasLastSyncAt,
+  saveGasWebhookUrl,
+  type GasSyncStatus,
+} from './services/googleSheetsSync';
 import type {
   FuelLogEntry,
   NotificationPreferences,
@@ -58,6 +71,8 @@ import {
   computeFuelAnalytics,
   evaluateMaintenanceAlerts,
   formatThaiDate,
+  getTodayIsoDate,
+  reconcileFuelLogsWithOdometer,
 } from './utils/maintenance';
 import {
   dispatchBrowserMaintenanceNotifications,
@@ -68,6 +83,8 @@ import {
   sendTestBrowserNotification,
   type BrowserPermissionState,
 } from './utils/notifications';
+import { apiFetch, ServerUnavailableError } from './utils/serverApi';
+import { mergeSheetsPayloadIntoState } from './utils/sheetsMerge';
 
 const STORAGE_KEY = 'ouanpee_triton_dashboard_v3';
 
@@ -81,7 +98,13 @@ function readCachedLocalState(): VehicleMaintenanceState | null {
       Array.isArray(parsed.services) &&
       Array.isArray(parsed.fuelLogs)
     ) {
-      return parsed;
+      return {
+        ...parsed,
+        vehicle: {
+          ...parsed.vehicle,
+          imageUrl: normalizeVehicleImageUrl(parsed.vehicle.imageUrl),
+        },
+      };
     }
   } catch {
     // Ignore storage errors
@@ -99,56 +122,6 @@ function isIdenticalToSeed(candidate: VehicleMaintenanceState): boolean {
   );
 }
 
-/**
- * แปลง imageUrl เก่า ('/src/assets/images/...') ที่อาจค้างอยู่ใน
- * localStorage / Firestore ให้เป็น URL รูปที่ build ปัจจุบันโหลดได้จริง
- * (เช่น /my-triton/assets/... บน GitHub Pages)
- */
-function normalizeState(state: VehicleMaintenanceState): VehicleMaintenanceState {
-  const fixedUrl = normalizeVehicleImageUrl(state.vehicle.imageUrl);
-  if (fixedUrl === state.vehicle.imageUrl) return state;
-  return { ...state, vehicle: { ...state.vehicle, imageUrl: fixedUrl } };
-}
-
-/**
- * แปลงข้อมูลที่ดึงมาจาก Google Sheets ให้เป็น VehicleMaintenanceState
- * logic เดียวกับ POST /api/sync-import ใน server.ts
- * (GAS push ส่ง { odometer, fuelPercent, fuelLogs, maintenanceItems, fullState })
- */
-function normalizeCloudState(
-  current: VehicleMaintenanceState,
-  cloudData: unknown
-): VehicleMaintenanceState {
-  const data = cloudData as Partial<VehicleMaintenanceState> & {
-    odometer?: number;
-    fuelPercent?: number;
-    fullState?: VehicleMaintenanceState;
-  };
-  if (
-    data &&
-    data.fullState &&
-    data.fullState.vehicle &&
-    Array.isArray(data.fullState.services)
-  ) {
-    return data.fullState;
-  }
-  if (typeof data?.odometer === 'number' && Array.isArray(data.fuelLogs)) {
-    return {
-      ...current,
-      vehicle: {
-        ...current.vehicle,
-        currentOdometer: data.odometer,
-        fuelPercent:
-          typeof data.fuelPercent === 'number'
-            ? data.fuelPercent
-            : current.vehicle.fuelPercent,
-      },
-      fuelLogs: data.fuelLogs,
-    };
-  }
-  throw new Error('ไม่พบโครงสร้างข้อมูลที่รองรับจาก Google Sheets');
-}
-
 function formatCloudErrorMessage(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err);
   if (raw.includes('Quota exceeded')) {
@@ -163,11 +136,12 @@ function formatCloudErrorMessage(err: unknown): string {
 
 export default function App() {
   const [state, setState] = useState<VehicleMaintenanceState>(() => {
-    return normalizeState(readCachedLocalState() ?? SEED_VEHICLE_STATE);
+    return readCachedLocalState() ?? SEED_VEHICLE_STATE;
   });
 
   const latestStateRef = useRef(state);
   latestStateRef.current = state;
+  const autoReconciledSigRef = useRef<string | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [authReady, setAuthReady] = useState(false);
@@ -194,6 +168,28 @@ export default function App() {
     () => getBrowserNotificationPermission()
   );
 
+  const [gasUrl, setGasUrl] = useState<string>(() => loadSavedGasWebhookUrl());
+  const [gasAutoSyncEnabled, setGasAutoSyncEnabled] = useState<boolean>(() =>
+    loadGasAutoSyncEnabled()
+  );
+  const [gasLastSyncAt, setGasLastSyncAt] = useState<string | null>(() =>
+    loadGasLastSyncAt()
+  );
+  const [gasLastDirection, setGasLastDirection] = useState<'pull' | 'push' | null>(null);
+  const [gasSyncStatus, setGasSyncStatus] = useState<GasSyncStatus>(() =>
+    loadSavedGasWebhookUrl() ? (loadGasLastSyncAt() ? 'synced' : 'idle') : 'unconfigured'
+  );
+  const [gasSyncError, setGasSyncError] = useState<string | null>(null);
+
+  const gasUrlRef = useRef(gasUrl);
+  gasUrlRef.current = gasUrl;
+  const gasAutoSyncRef = useRef(gasAutoSyncEnabled);
+  gasAutoSyncRef.current = gasAutoSyncEnabled;
+  const gasPushInFlightRef = useRef(false);
+  const gasQueuedPushStateRef = useRef<VehicleMaintenanceState | null>(null);
+  const startupGasPullKeyRef = useRef<string | null>(null);
+  const pendingFirestorePushRef = useRef(false);
+
   function updateNotificationPrefs(
     updater:
       | NotificationPreferences
@@ -206,13 +202,66 @@ export default function App() {
     });
   }
 
-  function commitState(next: VehicleMaintenanceState) {
-    const fixed = normalizeState(next);
-    setState(fixed);
+  async function triggerBackgroundGasPush(
+    nextState: VehicleMaintenanceState,
+    options?: { forceManual?: boolean; urlOverride?: string }
+  ): Promise<{ ok: boolean; message: string }> {
+    const targetUrl = (options?.urlOverride ?? gasUrlRef.current).trim();
+    if (!options?.forceManual && (!gasAutoSyncRef.current || !isValidGasWebhookUrl(targetUrl))) {
+      return { ok: false, message: 'ยังไม่ได้เปิดใช้งานหรือไม่ได้ระบุ URL ของ Google Sheets' };
+    }
+    if (!isValidGasWebhookUrl(targetUrl)) {
+      const msg = 'URL ของ Google Apps Script Web App ไม่ถูกต้อง';
+      setGasSyncStatus('error');
+      setGasSyncError(msg);
+      return { ok: false, message: msg };
+    }
+
+    if (gasPushInFlightRef.current && !options?.forceManual) {
+      gasQueuedPushStateRef.current = nextState;
+      return { ok: true, message: 'กำลังรอซิงค์รายการล่าสุดขึ้น Google Sheets...' };
+    }
+
+    gasPushInFlightRef.current = true;
+    setGasSyncStatus('syncing');
+    setGasSyncError(null);
+
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(fixed));
+      await pushToGoogleSheets(targetUrl, nextState);
+      const nowIso = new Date().toISOString();
+      setGasSyncStatus('synced');
+      setGasSyncError(null);
+      setGasLastDirection('push');
+      setGasLastSyncAt(nowIso);
+      saveGasLastSyncAt(nowIso);
+      return { ok: true, message: 'ส่งข้อมูลขึ้น Google Sheets สำเร็จเรียบร้อยแล้ว' };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'เชื่อมต่อไม่สำเร็จ';
+      setGasSyncStatus('error');
+      setGasSyncError(msg);
+      return { ok: false, message: `เชื่อมต่อไม่สำเร็จ: ${msg}` };
+    } finally {
+      gasPushInFlightRef.current = false;
+      const queued = gasQueuedPushStateRef.current;
+      if (queued) {
+        gasQueuedPushStateRef.current = null;
+        void triggerBackgroundGasPush(queued);
+      }
+    }
+  }
+
+  function commitState(
+    next: VehicleMaintenanceState,
+    options?: { autoPush?: boolean }
+  ) {
+    setState(next);
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
     } catch {
       // Ignore storage errors
+    }
+    if (options?.autoPush) {
+      void triggerBackgroundGasPush(next);
     }
   }
 
@@ -241,16 +290,25 @@ export default function App() {
           if (!active) return;
           const localCached = readCachedLocalState();
           // Protect local edits if the ephemeral server container reset back to seed data
-          if (localCached && isIdenticalToSeed(remoteState) && !isIdenticalToSeed(localCached)) {
-            setState(localCached);
+          const baseState =
+            localCached && isIdenticalToSeed(remoteState) && !isIdenticalToSeed(localCached)
+              ? localCached
+              : remoteState;
+          const reconciled = reconcileFuelLogsWithOdometer(baseState.fuelLogs, {
+            odometerLogs: baseState.odometerLogs,
+          });
+          const nextState =
+            reconciled.changedLogs.length > 0
+              ? { ...baseState, fuelLogs: reconciled.logs }
+              : baseState;
+          commitState(nextState);
+          if (baseState === localCached || reconciled.changedLogs.length > 0) {
             void apiFetch('/api/sync-import', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ fullState: localCached }),
+              body: JSON.stringify({ fullState: nextState }),
             }).catch(() => {});
-            return;
           }
-          commitState(remoteState);
         })
         .catch(() => {
           // Fallback already initialized from localStorage or SEED_VEHICLE_STATE
@@ -290,14 +348,38 @@ export default function App() {
         initialFallback,
         (remoteState) => {
           if (!active) return;
-          commitState(remoteState);
+          const reconciled = reconcileFuelLogsWithOdometer(remoteState.fuelLogs, {
+            odometerLogs: remoteState.odometerLogs,
+          });
+          const effectiveRemote: VehicleMaintenanceState =
+            reconciled.changedLogs.length > 0
+              ? { ...remoteState, fuelLogs: reconciled.logs }
+              : remoteState;
+
+          commitState(effectiveRemote);
           setCloudSyncStatus('synced');
           setCloudSyncError(null);
           setLoading(false);
+
+          if (pendingFirestorePushRef.current) {
+            pendingFirestorePushRef.current = false;
+            void triggerBackgroundGasPush(effectiveRemote);
+          }
+
+          const sig = remoteState.fuelLogs.map((l) => `${l.id}:${l.odometer}:${l.distance}`).join('|');
+          if (
+            reconciled.changedLogs.length > 0 &&
+            autoReconciledSigRef.current !== sig &&
+            authUser
+          ) {
+            autoReconciledSigRef.current = sig;
+            void fsBatchUpdateFuelLogs(authUser.uid, reconciled.changedLogs).catch(() => {});
+          }
+
           void apiFetch('/api/sync-import', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fullState: remoteState }),
+            body: JSON.stringify({ fullState: effectiveRemote }),
           }).catch(() => {});
         },
         (err) => {
@@ -316,6 +398,53 @@ export default function App() {
       unsubscribeFirestore?.();
     };
   }, [authReady, authUser]);
+
+  // Auto-pull latest state from Google Sheets on page startup
+  useEffect(() => {
+    if (!authReady || loading || syncModalOpen) return;
+    const trimmedUrl = gasUrl.trim();
+    if (!gasAutoSyncEnabled || !isValidGasWebhookUrl(trimmedUrl)) return;
+
+    const pullKey = `${trimmedUrl}:${authUser?.uid ?? 'local'}`;
+    if (startupGasPullKeyRef.current === pullKey) return;
+    startupGasPullKeyRef.current = pullKey;
+
+    let cancelled = false;
+    let completed = false;
+    setGasSyncStatus('syncing');
+    setGasSyncError(null);
+
+    pullFromGoogleSheets(trimmedUrl)
+      .then(async ({ hasData, data }) => {
+        if (cancelled) return;
+        if (hasData) {
+          await handleImportCloudState(data);
+        }
+        if (cancelled) return;
+        completed = true;
+        const nowIso = new Date().toISOString();
+        setGasSyncStatus('synced');
+        setGasSyncError(null);
+        setGasLastDirection('pull');
+        setGasLastSyncAt(nowIso);
+        saveGasLastSyncAt(nowIso);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        completed = true;
+        setGasSyncStatus('error');
+        setGasSyncError(
+          err instanceof Error ? err.message : 'ดึงข้อมูลจาก Google Sheets ไม่สำเร็จ'
+        );
+      });
+
+    return () => {
+      cancelled = true;
+      if (!completed && startupGasPullKeyRef.current === pullKey) {
+        startupGasPullKeyRef.current = null;
+      }
+    };
+  }, [authReady, loading, syncModalOpen, gasUrl, gasAutoSyncEnabled, authUser?.uid]);
 
   async function handleConnectCloud() {
     setCloudSyncError(null);
@@ -339,17 +468,19 @@ export default function App() {
   async function handleQuickUpdateOdometer(odometer: number) {
     await handleAddOdometerLog({
       odometer,
-      date: '2026-11-15',
+      date: getTodayIsoDate(),
       source: 'อัปเดตผ่านหน้าเว็บ',
     });
   }
 
   async function handleUpdateFuelGauge(fuelPercent: number) {
     if (authUser) {
+      pendingFirestorePushRef.current = true;
       try {
         await fsUpdateFuelGauge(authUser.uid, fuelPercent);
         return;
       } catch (err) {
+        pendingFirestorePushRef.current = false;
         setCloudSyncError(formatCloudErrorMessage(err));
       }
     }
@@ -361,12 +492,15 @@ export default function App() {
       });
       if (!res.ok) throw new Error('Failed to update gauge');
       const next = (await res.json()) as VehicleMaintenanceState;
-      commitState(next);
+      commitState(next, { autoPush: true });
     } catch {
-      commitState({
-        ...state,
-        vehicle: { ...state.vehicle, fuelPercent },
-      });
+      commitState(
+        {
+          ...state,
+          vehicle: { ...state.vehicle, fuelPercent },
+        },
+        { autoPush: true }
+      );
     }
   }
 
@@ -377,10 +511,12 @@ export default function App() {
     note?: string;
   }) {
     if (authUser) {
+      pendingFirestorePushRef.current = true;
       try {
         await fsUpdateOdometer(authUser.uid, payload);
         return;
       } catch (err) {
+        pendingFirestorePushRef.current = false;
         setCloudSyncError(formatCloudErrorMessage(err));
       }
     }
@@ -392,27 +528,30 @@ export default function App() {
       });
       if (!res.ok) throw new Error('Failed to save');
       const next = (await res.json()) as VehicleMaintenanceState;
-      commitState(next);
+      commitState(next, { autoPush: true });
     } catch {
-      commitState({
-        ...state,
-        vehicle: {
-          ...state.vehicle,
-          currentOdometer: payload.odometer,
-          lastUpdatedDate: payload.date,
-          lastUpdatedSource: payload.source,
-        },
-        odometerLogs: [
-          {
-            id: `odo-${Date.now()}`,
-            date: payload.date,
-            odometer: payload.odometer,
-            source: payload.source,
-            note: payload.note,
+      commitState(
+        {
+          ...state,
+          vehicle: {
+            ...state.vehicle,
+            currentOdometer: payload.odometer,
+            lastUpdatedDate: payload.date,
+            lastUpdatedSource: payload.source,
           },
-          ...state.odometerLogs,
-        ],
-      });
+          odometerLogs: [
+            {
+              id: `odo-${Date.now()}`,
+              date: payload.date,
+              odometer: payload.odometer,
+              source: payload.source,
+              note: payload.note,
+            },
+            ...state.odometerLogs,
+          ],
+        },
+        { autoPush: true }
+      );
     }
   }
 
@@ -448,10 +587,12 @@ export default function App() {
       };
 
       if (authUser) {
+        pendingFirestorePushRef.current = true;
         try {
           await fsUpdateFuelLog(authUser.uid, updatedEntry);
           return;
         } catch (err) {
+          pendingFirestorePushRef.current = false;
           setCloudSyncError(formatCloudErrorMessage(err));
         }
       }
@@ -464,14 +605,17 @@ export default function App() {
         });
         if (!res.ok) throw new Error('Failed to update fuel log');
         const next = (await res.json()) as VehicleMaintenanceState;
-        commitState(next);
+        commitState(next, { autoPush: true });
       } catch {
-        commitState({
-          ...state,
-          fuelLogs: state.fuelLogs.map((l) =>
-            l.id === payload.id ? updatedEntry : l
-          ),
-        });
+        commitState(
+          {
+            ...state,
+            fuelLogs: state.fuelLogs.map((l) =>
+              l.id === payload.id ? updatedEntry : l
+            ),
+          },
+          { autoPush: true }
+        );
       }
       return;
     }
@@ -493,6 +637,7 @@ export default function App() {
     };
 
     if (authUser) {
+      pendingFirestorePushRef.current = true;
       try {
         await fsAddFuelLog(authUser.uid, newEntry, {
           updateVehicleOdo: payload.odometer > state.vehicle.currentOdometer,
@@ -500,6 +645,7 @@ export default function App() {
         });
         return;
       } catch (err) {
+        pendingFirestorePushRef.current = false;
         setCloudSyncError(formatCloudErrorMessage(err));
       }
     }
@@ -512,29 +658,34 @@ export default function App() {
       });
       if (!res.ok) throw new Error('Failed to add fuel log');
       const next = (await res.json()) as VehicleMaintenanceState;
-      commitState(next);
+      commitState(next, { autoPush: true });
     } catch {
-      commitState({
-        ...state,
-        vehicle: {
-          ...state.vehicle,
-          currentOdometer: Math.max(state.vehicle.currentOdometer, payload.odometer),
-          fuelPercent:
-            payload.newFuelPercent !== undefined
-              ? payload.newFuelPercent
-              : state.vehicle.fuelPercent,
+      commitState(
+        {
+          ...state,
+          vehicle: {
+            ...state.vehicle,
+            currentOdometer: Math.max(state.vehicle.currentOdometer, payload.odometer),
+            fuelPercent:
+              payload.newFuelPercent !== undefined
+                ? payload.newFuelPercent
+                : state.vehicle.fuelPercent,
+          },
+          fuelLogs: [...state.fuelLogs, newEntry],
         },
-        fuelLogs: [...state.fuelLogs, newEntry],
-      });
+        { autoPush: true }
+      );
     }
   }
 
   async function handleDeleteFuelLog(id: string) {
     if (authUser) {
+      pendingFirestorePushRef.current = true;
       try {
         await fsDeleteFuelLog(authUser.uid, id);
         return;
       } catch (err) {
+        pendingFirestorePushRef.current = false;
         setCloudSyncError(formatCloudErrorMessage(err));
       }
     }
@@ -542,13 +693,43 @@ export default function App() {
       const res = await apiFetch(`/api/fuel-logs/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to delete fuel log');
       const next = (await res.json()) as VehicleMaintenanceState;
-      commitState(next);
+      commitState(next, { autoPush: true });
     } catch {
-      commitState({
-        ...state,
-        fuelLogs: state.fuelLogs.filter((l) => l.id !== id),
-      });
+      commitState(
+        {
+          ...state,
+          fuelLogs: state.fuelLogs.filter((l) => l.id !== id),
+        },
+        { autoPush: true }
+      );
     }
+  }
+
+  async function handleRecalculateAllFuelLogs() {
+    const result = reconcileFuelLogsWithOdometer(state.fuelLogs, {
+      odometerLogs: state.odometerLogs,
+      forceRecalculateAllKml: true,
+    });
+    if (result.changedLogs.length === 0) return;
+
+    if (authUser) {
+      try {
+        await fsBatchUpdateFuelLogs(authUser.uid, result.changedLogs);
+      } catch (err) {
+        setCloudSyncError(formatCloudErrorMessage(err));
+      }
+    }
+
+    const nextState: VehicleMaintenanceState = {
+      ...state,
+      fuelLogs: result.logs,
+    };
+    commitState(nextState, { autoPush: true });
+    void apiFetch('/api/sync-import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fullState: nextState }),
+    }).catch(() => {});
   }
 
   async function handleSaveService(payload: {
@@ -581,6 +762,7 @@ export default function App() {
     };
 
     if (authUser) {
+      pendingFirestorePushRef.current = true;
       try {
         await fsSaveService(
           authUser.uid,
@@ -590,6 +772,7 @@ export default function App() {
         );
         return;
       } catch (err) {
+        pendingFirestorePushRef.current = false;
         setCloudSyncError(formatCloudErrorMessage(err));
       }
     }
@@ -603,21 +786,24 @@ export default function App() {
         });
         if (!res.ok) throw new Error('Failed to update');
         const next = (await res.json()) as VehicleMaintenanceState;
-        commitState(next);
+        commitState(next, { autoPush: true });
       } catch {
-        commitState({
-          ...state,
-          services: state.services.map((s) =>
-            s.id === payload.id
-              ? {
-                  ...s,
-                  ...payload,
-                  id: s.id,
-                  totalCost: payload.partsCost + payload.laborCost,
-                }
-              : s
-          ),
-        });
+        commitState(
+          {
+            ...state,
+            services: state.services.map((s) =>
+              s.id === payload.id
+                ? {
+                    ...s,
+                    ...payload,
+                    id: s.id,
+                    totalCost: payload.partsCost + payload.laborCost,
+                  }
+                : s
+            ),
+          },
+          { autoPush: true }
+        );
       }
       return;
     }
@@ -630,19 +816,23 @@ export default function App() {
       });
       if (!res.ok) throw new Error('Failed to create');
       const next = (await res.json()) as VehicleMaintenanceState;
-      commitState(next);
+      commitState(next, { autoPush: true });
     } catch {
-      commitState({
-        ...state,
-        services: [record, ...state.services],
-      });
+      commitState(
+        {
+          ...state,
+          services: [record, ...state.services],
+        },
+        { autoPush: true }
+      );
     }
   }
 
   async function handleResetCycle(serviceId: string) {
-    const todayIso = new Date().toISOString().slice(0, 10);
+    const todayIso = getTodayIsoDate();
     const revisionNote = `รีเซ็ตรอบใหม่ที่เลขไมล์ ${state.vehicle.currentOdometer.toLocaleString('th-TH')} กม.`;
     if (authUser) {
+      pendingFirestorePushRef.current = true;
       try {
         await fsResetServiceCycle(
           authUser.uid,
@@ -653,6 +843,7 @@ export default function App() {
         );
         return;
       } catch (err) {
+        pendingFirestorePushRef.current = false;
         setCloudSyncError(formatCloudErrorMessage(err));
       }
     }
@@ -662,30 +853,35 @@ export default function App() {
       });
       if (!res.ok) throw new Error('Failed to reset cycle');
       const next = (await res.json()) as VehicleMaintenanceState;
-      commitState(next);
+      commitState(next, { autoPush: true });
     } catch {
-      commitState({
-        ...state,
-        services: state.services.map((s) =>
-          s.id === serviceId
-            ? {
-                ...s,
-                date: todayIso,
-                odometer: state.vehicle.currentOdometer,
-                revisionNote,
-              }
-            : s
-        ),
-      });
+      commitState(
+        {
+          ...state,
+          services: state.services.map((s) =>
+            s.id === serviceId
+              ? {
+                  ...s,
+                  date: todayIso,
+                  odometer: state.vehicle.currentOdometer,
+                  revisionNote,
+                }
+              : s
+          ),
+        },
+        { autoPush: true }
+      );
     }
   }
 
   async function handleDeleteService(id: string) {
     if (authUser) {
+      pendingFirestorePushRef.current = true;
       try {
         await fsDeleteService(authUser.uid, id);
         return;
       } catch (err) {
+        pendingFirestorePushRef.current = false;
         setCloudSyncError(formatCloudErrorMessage(err));
       }
     }
@@ -693,12 +889,15 @@ export default function App() {
       const res = await apiFetch(`/api/services/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to delete');
       const next = (await res.json()) as VehicleMaintenanceState;
-      commitState(next);
+      commitState(next, { autoPush: true });
     } catch {
-      commitState({
-        ...state,
-        services: state.services.filter((s) => s.id !== id),
-      });
+      commitState(
+        {
+          ...state,
+          services: state.services.filter((s) => s.id !== id),
+        },
+        { autoPush: true }
+      );
     }
   }
 
@@ -708,10 +907,12 @@ export default function App() {
       [key]: intervalKm,
     };
     if (authUser) {
+      pendingFirestorePushRef.current = true;
       try {
         await fsUpdateScheduleIntervals(authUser.uid, nextIntervals);
         return;
       } catch (err) {
+        pendingFirestorePushRef.current = false;
         setCloudSyncError(formatCloudErrorMessage(err));
       }
     }
@@ -723,38 +924,76 @@ export default function App() {
       });
       if (!res.ok) throw new Error('Failed to update interval');
       const next = (await res.json()) as VehicleMaintenanceState;
-      commitState(next);
+      commitState(next, { autoPush: true });
     } catch {
-      commitState({
-        ...state,
-        scheduleIntervals: nextIntervals,
-      });
+      commitState(
+        {
+          ...state,
+          scheduleIntervals: nextIntervals,
+        },
+        { autoPush: true }
+      );
     }
   }
 
-  async function handleImportCloudState(cloudPayload: unknown) {
-    // แปลงข้อมูลจาก Sheets ฝั่ง client โดยตรง (logic เดียวกับ /api/sync-import)
-    // โหมด GitHub Pages ไม่มีเซิร์ฟเวอร์ จึงไม่เรียก /api อีก
-    const next = normalizeCloudState(state, cloudPayload);
+  async function handleImportCloudState(cloudPayload: unknown): Promise<{
+    addedFuelCount: number;
+    addedServiceCount: number;
+    updatedOdometer: boolean;
+  }> {
+    const currentBaseline = latestStateRef.current;
+    const localMerge = mergeSheetsPayloadIntoState(currentBaseline, cloudPayload);
+
+    let next: VehicleMaintenanceState;
+    try {
+      const res = await apiFetch('/api/sync-import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cloudPayload),
+      });
+      if (!res.ok) {
+        const err = (await res.json()) as { error?: string };
+        throw new Error(err.error ?? 'นำเข้าข้อมูลไม่สำเร็จ');
+      }
+      next = (await res.json()) as VehicleMaintenanceState;
+    } catch (err) {
+      if (!(err instanceof ServerUnavailableError)) {
+        throw err;
+      }
+      next = localMerge.state;
+    }
+
+    const reconciled = reconcileFuelLogsWithOdometer(next.fuelLogs, {
+      odometerLogs: next.odometerLogs,
+    });
+    const normalizedNext: VehicleMaintenanceState = {
+      ...next,
+      vehicle: {
+        ...next.vehicle,
+        imageUrl: normalizeVehicleImageUrl(next.vehicle.imageUrl),
+      },
+      fuelLogs: reconciled.changedLogs.length > 0 ? reconciled.logs : next.fuelLogs,
+    };
+
     if (authUser) {
       try {
-        await fsCreateOrResetVehicleWithBatch(authUser.uid, state, next);
+        await fsCreateOrResetVehicleWithBatch(authUser.uid, currentBaseline, normalizedNext);
       } catch (err) {
         setCloudSyncError(formatCloudErrorMessage(err));
       }
     }
-    commitState(next);
-    // Best-effort: ซิงค์สำเนาเซิร์ฟเวอร์ด้วยเมื่อมีเซิร์ฟเวอร์ (no-op บน Pages)
-    void apiFetch('/api/sync-import', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fullState: next }),
-    }).catch(() => {});
+    commitState(normalizedNext);
+    return {
+      addedFuelCount: localMerge.addedFuelCount,
+      addedServiceCount: localMerge.addedServiceCount,
+      updatedOdometer: localMerge.updatedOdometer,
+    };
   }
 
   async function handleApplyDrivePatch(patch: ImportedVehiclePatch) {
     const next = mergeImportedPatch(state, patch);
     if (authUser) {
+      pendingFirestorePushRef.current = true;
       try {
         await fsCreateOrResetVehicleWithBatch(authUser.uid, state, next);
         commitState(next);
@@ -765,6 +1004,7 @@ export default function App() {
         }).catch(() => {});
         return;
       } catch (err) {
+        pendingFirestorePushRef.current = false;
         setCloudSyncError(formatCloudErrorMessage(err));
       }
     }
@@ -780,17 +1020,21 @@ export default function App() {
         throw new Error(err.error ?? 'อัปเดตข้อมูลไม่สำเร็จ');
       }
       const serverNext = (await res.json()) as VehicleMaintenanceState;
-      commitState(serverNext);
+      commitState(serverNext, { autoPush: true });
     } catch {
-      commitState(next);
+      commitState(next, { autoPush: true });
     }
   }
 
   async function handleResetSeed() {
+    let firestoreSucceeded = false;
     if (authUser) {
+      pendingFirestorePushRef.current = true;
       try {
         await fsCreateOrResetVehicleWithBatch(authUser.uid, state, SEED_VEHICLE_STATE);
+        firestoreSucceeded = true;
       } catch (err) {
+        pendingFirestorePushRef.current = false;
         setCloudSyncError(formatCloudErrorMessage(err));
       }
     }
@@ -798,11 +1042,90 @@ export default function App() {
       const res = await apiFetch('/api/reset', { method: 'POST' });
       if (!res.ok) throw new Error('Failed to reset');
       const next = (await res.json()) as VehicleMaintenanceState;
-      commitState(next);
+      commitState(next, { autoPush: !firestoreSucceeded });
     } catch {
-      commitState(SEED_VEHICLE_STATE);
+      commitState(SEED_VEHICLE_STATE, { autoPush: !firestoreSucceeded });
     } finally {
       setConfirmReset(false);
+    }
+  }
+
+  function handleChangeGasUrl(nextRawUrl: string) {
+    const saved = saveGasWebhookUrl(nextRawUrl);
+    setGasUrl(saved);
+    setGasSyncError(null);
+    if (!saved) {
+      setGasSyncStatus('unconfigured');
+    } else if (gasSyncStatus === 'unconfigured' || gasSyncStatus === 'error') {
+      setGasSyncStatus(gasLastSyncAt ? 'synced' : 'idle');
+    }
+  }
+
+  function handleToggleGasAutoSync(enabled: boolean) {
+    saveGasAutoSyncEnabled(enabled);
+    setGasAutoSyncEnabled(enabled);
+  }
+
+  async function handleManualGasSync(
+    direction: 'push' | 'pull',
+    urlOverride?: string
+  ): Promise<{ ok: boolean; message: string }> {
+    const targetUrl = (urlOverride ?? gasUrl).trim();
+    if (!targetUrl) {
+      return { ok: false, message: 'กรุณาวาง URL ของ Google Apps Script Web App ก่อน' };
+    }
+
+    if (direction === 'push') {
+      return triggerBackgroundGasPush(latestStateRef.current, {
+        forceManual: true,
+        urlOverride: targetUrl,
+      });
+    }
+
+    setGasSyncStatus('syncing');
+    setGasSyncError(null);
+    try {
+      const { hasData, data } = await pullFromGoogleSheets(targetUrl);
+      let importSummary = {
+        addedFuelCount: 0,
+        addedServiceCount: 0,
+        updatedOdometer: false,
+      };
+      if (hasData) {
+        importSummary = await handleImportCloudState(data);
+      }
+      const nowIso = new Date().toISOString();
+      setGasSyncStatus('synced');
+      setGasSyncError(null);
+      setGasLastDirection('pull');
+      setGasLastSyncAt(nowIso);
+      saveGasLastSyncAt(nowIso);
+
+      let successMessage = hasData
+        ? 'ดึงข้อมูลจาก Google Sheets ลงแดชบอร์ดสำเร็จแล้ว'
+        : 'เชื่อมต่อ Google Sheets สำเร็จ (ยังไม่มีข้อมูลใหม่ในชีต)';
+      if (importSummary.addedFuelCount > 0 || importSummary.addedServiceCount > 0) {
+        const parts: string[] = [];
+        if (importSummary.addedFuelCount > 0) {
+          parts.push(`เติมน้ำมัน +${importSummary.addedFuelCount} รอบ`);
+        }
+        if (importSummary.addedServiceCount > 0) {
+          parts.push(`ซ่อมบำรุง +${importSummary.addedServiceCount} รายการ`);
+        }
+        successMessage = `ดึงข้อมูลจาก Google Sheets สำเร็จ (เพิ่มรายการใหม่: ${parts.join(', ')}${
+          importSummary.updatedOdometer ? ' และอัปเดตเลขไมล์ล่าสุดแล้ว' : ''
+        })`;
+      }
+
+      return {
+        ok: true,
+        message: successMessage,
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'เชื่อมต่อไม่สำเร็จ';
+      setGasSyncStatus('error');
+      setGasSyncError(msg);
+      return { ok: false, message: `เชื่อมต่อไม่สำเร็จ: ${msg}` };
     }
   }
 
@@ -1022,6 +1345,7 @@ export default function App() {
 
                 <FuelHistorySection
                   fuelLogs={state.fuelLogs}
+                  odometerLogs={state.odometerLogs}
                   tankCapacityLiters={state.vehicle.tankCapacityLiters}
                   onOpenAddFuel={() => {
                     setOcrPrefill(null);
@@ -1034,6 +1358,7 @@ export default function App() {
                     setFuelModalOpen(true);
                   }}
                   onDeleteFuelLog={handleDeleteFuelLog}
+                  onRecalculateAllFuelLogs={handleRecalculateAllFuelLogs}
                 />
 
                 <ServiceHistoryTable
@@ -1066,6 +1391,7 @@ export default function App() {
                 />
                 <FuelHistorySection
                   fuelLogs={state.fuelLogs}
+                  odometerLogs={state.odometerLogs}
                   tankCapacityLiters={state.vehicle.tankCapacityLiters}
                   onOpenAddFuel={() => {
                     setOcrPrefill(null);
@@ -1078,6 +1404,7 @@ export default function App() {
                     setFuelModalOpen(true);
                   }}
                   onDeleteFuelLog={handleDeleteFuelLog}
+                  onRecalculateAllFuelLogs={handleRecalculateAllFuelLogs}
                 />
               </>
             )}
@@ -1195,9 +1522,15 @@ export default function App() {
 
       <GoogleSheetsSyncModal
         isOpen={syncModalOpen}
-        state={state}
+        gasUrl={gasUrl}
+        autoSyncEnabled={gasAutoSyncEnabled}
+        syncStatus={gasSyncStatus}
+        lastSyncAt={gasLastSyncAt}
+        lastDirection={gasLastDirection}
         onClose={() => setSyncModalOpen(false)}
-        onImportCloudState={handleImportCloudState}
+        onChangeGasUrl={handleChangeGasUrl}
+        onToggleAutoSync={handleToggleGasAutoSync}
+        onManualSync={handleManualGasSync}
       />
 
       <GoogleDriveModal
@@ -1206,6 +1539,18 @@ export default function App() {
         onClose={() => setDriveModalOpen(false)}
         onApplyPatch={handleApplyDrivePatch}
       />
+
+      {!loading && (
+        <SheetsSyncStatusBadge
+          gasUrl={gasUrl}
+          autoSyncEnabled={gasAutoSyncEnabled}
+          status={gasSyncStatus}
+          lastSyncAt={gasLastSyncAt}
+          lastDirection={gasLastDirection}
+          errorMessage={gasSyncError}
+          onOpenSyncModal={() => setSyncModalOpen(true)}
+        />
+      )}
 
       {!loading && (
         <MaintenanceAlertToast
