@@ -4,7 +4,11 @@ import type {
   ServiceCategory,
   ServiceRecord,
   VehicleMaintenanceState,
-} from '../types/maintenance';
+} from '../types/maintenance.ts';
+import {
+  getTodayIsoDate,
+  reconcileFuelLogsWithOdometer,
+} from './maintenance.ts';
 
 export interface ImportedVehiclePatch {
   summary: string;
@@ -81,13 +85,13 @@ export function parseDriveTextDeterministic(
               ? f.isoDate
               : typeof f.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(f.date)
                 ? f.date
-                : new Date().toISOString().slice(0, 10),
+                : getTodayIsoDate(),
           odometer: Number(f.odometer),
           distance: Number(f.distance ?? 0),
           amount: Number(f.amount),
           liters: Number(f.liters ?? 0),
           pricePerLiter: Number(f.pricePerLiter ?? 0),
-          kml: Number(f.kml ?? 0),
+          kml: Number(f.kml ?? f.kmPerLiter ?? 0),
           note: String(f.note ?? 'นำเข้าจาก Google Drive'),
         }));
 
@@ -102,7 +106,7 @@ export function parseDriveTextDeterministic(
                 ? m.isoDate
                 : typeof m.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(m.date)
                   ? m.date
-                  : new Date().toISOString().slice(0, 10),
+                  : getTodayIsoDate(),
             title: String(m.title),
             category: normalizeCategory(
               typeof m.category === 'string' ? m.category : undefined
@@ -164,7 +168,11 @@ export function mergeImportedPatch(
   patch: ImportedVehiclePatch
 ): VehicleMaintenanceState {
   if (patch.replaceFullState) {
-    return patch.replaceFullState;
+    const cloned = structuredClone(patch.replaceFullState);
+    cloned.fuelLogs = reconcileFuelLogsWithOdometer(cloned.fuelLogs, {
+      odometerLogs: cloned.odometerLogs,
+    }).logs;
+    return cloned;
   }
 
   const next = structuredClone(current);
@@ -172,7 +180,7 @@ export function mergeImportedPatch(
   const patchDate =
     patch.updatedDate && /^\d{4}-\d{2}-\d{2}$/.test(patch.updatedDate)
       ? patch.updatedDate
-      : new Date().toISOString().slice(0, 10);
+      : getTodayIsoDate();
   const sourceLabel = patch.sourceLabel ?? 'นำเข้าจาก Google Drive';
 
   let highestOdometer = next.vehicle.currentOdometer;
@@ -187,26 +195,15 @@ export function mergeImportedPatch(
         Math.abs(existing.amount - incoming.amount) < 0.01
     );
     if (!duplicate) {
-      const lastFuel = [...next.fuelLogs].sort((a, b) => a.odometer - b.odometer).pop();
-      const distance =
-        incoming.distance > 0
-          ? incoming.distance
-          : lastFuel
-            ? Math.max(0, incoming.odometer - lastFuel.odometer)
-            : 0;
-      const rawKml =
-        incoming.kml > 0
-          ? incoming.kml
-          : distance > 0 && incoming.liters > 0
-            ? Number((distance / incoming.liters).toFixed(2))
-            : 0;
-      const kml = rawKml > 30 ? 0 : rawKml;
+      const incomingWithAlias = incoming as Partial<FuelLogEntry> & { kmPerLiter?: number };
+      const rawKml = Number(incomingWithAlias.kml ?? incomingWithAlias.kmPerLiter ?? 0);
+      const kml = Number.isFinite(rawKml) && rawKml > 0 ? rawKml : 0;
 
       next.fuelLogs.push({
         id: `fuel-drive-${nowStamp}-${i}`,
         date: incoming.date,
         odometer: incoming.odometer,
-        distance,
+        distance: Math.max(0, Number(incoming.distance || 0)),
         amount: incoming.amount,
         liters: incoming.liters,
         pricePerLiter: incoming.pricePerLiter,
@@ -218,6 +215,11 @@ export function mergeImportedPatch(
       highestOdometer = incoming.odometer;
     }
   }
+
+  // Reconcile all fuel distances chronologically against previous odometer readings
+  next.fuelLogs = reconcileFuelLogsWithOdometer(next.fuelLogs, {
+    odometerLogs: next.odometerLogs,
+  }).logs;
 
   // Merge services with deduplication by (date + odometer + title)
   for (let i = 0; i < patch.newServices.length; i++) {
