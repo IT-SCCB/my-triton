@@ -21,11 +21,9 @@ import type {
   VehicleMaintenanceState,
   VehicleProfile,
 } from '../types/maintenance';
+import { DEFAULT_TRUCK_IMAGE_URL, normalizeVehicleImageUrl } from '../data/seedData';
+import { getTodayIsoDate } from '../utils/maintenance';
 import { auth, db } from './googleAuth';
-import {
-  DEFAULT_TRUCK_IMAGE_URL,
-  normalizeVehicleImageUrl,
-} from '../data/seedData';
 
 export const DEFAULT_VEHICLE_ID = 'ouanpee-triton-2012';
 
@@ -95,7 +93,7 @@ function clampStr(raw: string | undefined | null, maxLen: number, fallback = '')
 function sanitizeDateStr(raw: string | undefined | null): string {
   const val = (raw ?? '').trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
-  return new Date().toISOString().slice(0, 10);
+  return getTodayIsoDate();
 }
 
 function sanitizeScheduleIntervals(
@@ -138,7 +136,11 @@ function buildVehicleDocPayload(
     currentOdometer: Math.max(1, Math.min(2_000_000, Math.round(vehicle.currentOdometer || 1))),
     lastUpdatedDate: sanitizeDateStr(vehicle.lastUpdatedDate),
     lastUpdatedSource: clampStr(vehicle.lastUpdatedSource, 200, 'อัปเดตผ่านหน้าเว็บ'),
-    imageUrl: clampStr(vehicle.imageUrl, 500, DEFAULT_TRUCK_IMAGE_URL),
+    imageUrl: clampStr(
+      normalizeVehicleImageUrl(vehicle.imageUrl),
+      500,
+      DEFAULT_TRUCK_IMAGE_URL
+    ),
     scheduleIntervals: sanitizeScheduleIntervals(scheduleIntervals),
     createdAt: timestamps.createdAt,
     updatedAt: timestamps.updatedAt,
@@ -380,10 +382,10 @@ export function ensureSeededAndSubscribeToVehicle(
               tankCapacityLiters: Number(d.tankCapacityLiters ?? 75),
               fuelPercent: Number(d.fuelPercent ?? 55),
               currentOdometer: Number(d.currentOdometer ?? 233850),
-              lastUpdatedDate: String(d.lastUpdatedDate ?? '2026-11-15'),
+              lastUpdatedDate: String(d.lastUpdatedDate ?? getTodayIsoDate()),
               lastUpdatedSource: String(d.lastUpdatedSource ?? 'Firestore Cloud'),
               imageUrl: normalizeVehicleImageUrl(
-                typeof d.imageUrl === 'string' ? d.imageUrl : ''
+                typeof d.imageUrl === 'string' ? d.imageUrl : undefined
               ),
             },
             scheduleIntervals: (d.scheduleIntervals ?? {}) as Record<string, number>,
@@ -448,7 +450,7 @@ export function ensureSeededAndSubscribeToVehicle(
               amount: Number(d.amount ?? 0),
               liters: Number(d.liters ?? 0),
               pricePerLiter: Number(d.pricePerLiter ?? 0),
-              kml: Number(d.kml ?? 0),
+              kml: Number(d.kml ?? d.kmPerLiter ?? 0),
               note: String(d.note ?? ''),
             };
           });
@@ -636,6 +638,33 @@ export async function fsUpdateFuelLog(
   }
 }
 
+export async function fsBatchUpdateFuelLogs(
+  userId: string,
+  updatedLogs: FuelLogEntry[]
+): Promise<void> {
+  if (updatedLogs.length === 0) return;
+  const vehiclePath = `users/${userId}/vehicles/${DEFAULT_VEHICLE_ID}`;
+  const now = serverTimestamp();
+
+  try {
+    const CHUNK = 400;
+    for (let i = 0; i < updatedLogs.length; i += CHUNK) {
+      const batch = writeBatch(db);
+      for (const entry of updatedLogs.slice(i, i + CHUNK)) {
+        const id = sanitizeId(entry.id, 'fuel');
+        batch.update(doc(db, `${vehiclePath}/fuelLogs/${id}`), {
+          distance: Math.max(0, Math.min(500_000, Number(entry.distance || 0))),
+          kml: Math.max(0, Math.min(500, Number(entry.kml || 0))),
+          updatedAt: now,
+        });
+      }
+      await batch.commit();
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `${vehiclePath}/fuelLogs`);
+  }
+}
+
 export async function fsDeleteFuelLog(
   userId: string,
   fuelLogId: string
@@ -797,7 +826,11 @@ export async function fsSyncFullState(
       engineSpec: clampStr(nextState.vehicle.engineSpec, 80, '2.5 DI-D'),
       year: Math.max(1950, Math.min(2100, Math.round(nextState.vehicle.year || 2012))),
       tankCapacityLiters: Math.max(1, Math.min(500, Number(nextState.vehicle.tankCapacityLiters || 75))),
-      imageUrl: clampStr(nextState.vehicle.imageUrl, 500, DEFAULT_TRUCK_IMAGE_URL),
+      imageUrl: clampStr(
+        normalizeVehicleImageUrl(nextState.vehicle.imageUrl),
+        500,
+        DEFAULT_TRUCK_IMAGE_URL
+      ),
       updatedAt: now,
     });
   });
