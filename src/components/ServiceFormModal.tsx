@@ -5,7 +5,11 @@ import type {
   ServiceCategory,
   ServiceRecord,
 } from '../types/maintenance';
-import { CATEGORY_LABELS, validateServiceInput } from '../utils/maintenance';
+import {
+  CATEGORY_LABELS,
+  getTodayIsoDate,
+  validateServiceInput,
+} from '../utils/maintenance';
 
 interface ServiceFormModalProps {
   isOpen: boolean;
@@ -42,7 +46,7 @@ export function ServiceFormModal({
   onClose,
   onSubmit,
 }: ServiceFormModalProps) {
-  const [date, setDate] = useState('2026-11-15');
+  const [date, setDate] = useState(() => getTodayIsoDate());
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<ServiceCategory>('fluids');
   const [scheduleKey, setScheduleKey] = useState<ScheduleKey | ''>('');
@@ -69,7 +73,7 @@ export function ServiceFormModal({
       setNotes(editingService.notes);
       setRevisionNote(editingService.revisionNote ?? '');
     } else {
-      setDate('2026-11-15');
+      setDate(getTodayIsoDate());
       setTitle('');
       setCategory('fluids');
       setScheduleKey('');
