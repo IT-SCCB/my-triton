@@ -193,32 +193,55 @@ test('input validation rejects invalid odometer, fuel, and empty service fields'
   );
 });
 
-test('fuel analytics and chart helper filter out extreme km/L spikes (>30 km/L) by default', async () => {
-  const { getFuelChartLogs } = await import('./maintenance');
-  const logsWithSpike = [
+test('fuel analytics and chart helper include only 4-22 km/L cycles in avgKml while keeping total distance and cost', async () => {
+  const { getFuelChartLogs, isFuelKmlOutOfRange } = await import('./maintenance');
+  const logsWithSkippedAndPartial = [
     ...SEED_VEHICLE_STATE.fuelLogs,
     {
-      id: 'fuel-spike',
+      id: 'fuel-skipped-high',
       date: '2025-03-04',
       odometer: 206945,
-      distance: 0,
+      distance: 650,
       amount: 500,
       liters: 15.156,
       pricePerLiter: 32.99,
-      kml: 656.25,
-      note: 'บางจาก กม22',
+      kml: 42.89,
+      note: 'บางจาก กม22 (จดข้ามรอบ)',
+    },
+    {
+      id: 'fuel-partial-low',
+      date: '2025-03-10',
+      odometer: 207015,
+      distance: 70,
+      amount: 800,
+      liters: 24.25,
+      pricePerLiter: 32.99,
+      kml: 2.89,
+      note: 'Esso (เติมเต็มถังชดเชย)',
     },
   ];
 
-  const stats = computeFuelAnalytics(logsWithSpike, 55, 75);
+  assert.equal(isFuelKmlOutOfRange(42.89), true);
+  assert.equal(isFuelKmlOutOfRange(2.89), true);
+  assert.equal(isFuelKmlOutOfRange(22.01), true);
+  assert.equal(isFuelKmlOutOfRange(3.99), true);
+  assert.equal(isFuelKmlOutOfRange(4), false);
+  assert.equal(isFuelKmlOutOfRange(22), false);
+  assert.equal(isFuelKmlOutOfRange(16.27), false);
+
+  const stats = computeFuelAnalytics(logsWithSkippedAndPartial, 55, 75);
+  // avgKml excludes >22 and <4 -> matches seed average (12.67 km/L)
   assert.equal(stats.avgKml, 12.67);
+  // totalFuelCost & totalDistance STILL preserve all entries (2700 + 500 + 800 = 4000, 851 + 650 + 70 = 1571)
+  assert.equal(stats.totalFuelCost, 4000);
+  assert.equal(stats.totalDistance, 1571);
 
-  const cleanChart = getFuelChartLogs(logsWithSpike);
+  const cleanChart = getFuelChartLogs(logsWithSkippedAndPartial);
   assert.equal(cleanChart.length, 3);
-  assert.equal(cleanChart.some((l) => l.id === 'fuel-spike'), false);
+  assert.equal(cleanChart.some((l) => l.id === 'fuel-skipped-high' || l.id === 'fuel-partial-low'), false);
 
-  const allChart = getFuelChartLogs(logsWithSpike, { includeOutliers: true });
-  assert.equal(allChart.length, 4);
+  const allChart = getFuelChartLogs(logsWithSkippedAndPartial, { includeOutliers: true });
+  assert.equal(allChart.length, 5);
 });
 
 test('validateFuelInput enforces 75L tank capacity guard for full-tank refills', () => {
@@ -322,4 +345,171 @@ test('evaluateMaintenanceAlerts triggers approaching (<=500km) and overdue alert
   assert.equal(overdueAlerts.length, 2);
   assert.equal(overdueAlerts[0].severity, 'overdue');
   assert.equal(overdueAlerts[0].remainingKm, -61);
+});
+
+test('reconcileFuelLogsWithOdometer backfills missing distances and recalculates km/L accurately', async () => {
+  const { getTodayIsoDate, reconcileFuelLogsWithOdometer } = await import('./maintenance');
+
+  assert.match(getTodayIsoDate(), /^\d{4}-\d{2}-\d{2}$/);
+
+  const importedFuelLogs = [
+    {
+      id: 'f-1',
+      date: '2026-09-30',
+      odometer: 232400,
+      distance: 0,
+      amount: 1000,
+      liters: 30,
+      pricePerLiter: 33.33,
+      kml: 0,
+      note: 'บางจาก',
+    },
+    {
+      id: 'f-2',
+      date: '2026-10-10',
+      odometer: 232850,
+      distance: 0,
+      amount: 1200,
+      liters: 36,
+      pricePerLiter: 33.33,
+      kml: 656.25,
+      note: 'PTT',
+    },
+    {
+      id: 'f-3',
+      date: '2026-10-20',
+      odometer: 233350,
+      distance: 0,
+      amount: 1300,
+      liters: 40,
+      pricePerLiter: 32.5,
+      kml: 0,
+      note: 'Esso',
+    },
+  ];
+
+  const odoBaseline = [
+    {
+      id: 'odo-base',
+      date: '2026-09-29',
+      odometer: 231895,
+      source: 'บันทึกเซอร์วิส',
+    },
+  ];
+
+  const autoResult = reconcileFuelLogsWithOdometer(importedFuelLogs, {
+    odometerLogs: odoBaseline,
+  });
+
+  assert.equal(autoResult.missingDistanceCount, 3);
+  assert.equal(autoResult.logs[0].distance, 505); // 232400 - 231895
+  assert.equal(autoResult.logs[0].kml, 16.83); // 505 / 30
+  assert.equal(autoResult.logs[1].distance, 450); // 232850 - 232400
+  assert.equal(autoResult.logs[1].kml, 12.5); // 450 / 36 (spike 656.25 fixed)
+  assert.equal(autoResult.logs[2].distance, 500); // 233350 - 232850
+  assert.equal(autoResult.logs[2].kml, 12.5); // 500 / 40
+});
+
+test('reconcileFuelLogsWithOdometer preserves recorded kmPerLiter/kml even under forceRecalculateAllKml and keeps seed rows untouched', async () => {
+  const { getRecordedFuelKml, reconcileFuelLogsWithOdometer } = await import('./maintenance');
+
+  const seedCheck = reconcileFuelLogsWithOdometer(SEED_VEHICLE_STATE.fuelLogs, {
+    odometerLogs: SEED_VEHICLE_STATE.odometerLogs,
+    forceRecalculateAllKml: true,
+  });
+
+  assert.equal(seedCheck.mismatchedCount, 0);
+  assert.equal(seedCheck.changedLogs.length, 0);
+
+  const byId = new Map(seedCheck.logs.map((l) => [l.id, l]));
+  assert.equal(byId.get('fuel-3')?.odometer, 233850);
+  assert.equal(byId.get('fuel-3')?.distance, 189);
+  assert.equal(byId.get('fuel-3')?.kml, 16.27);
+  assert.equal(byId.get('fuel-2')?.odometer, 233661);
+  assert.equal(byId.get('fuel-2')?.distance, 72);
+  assert.equal(byId.get('fuel-2')?.kml, 13.39);
+  assert.equal(byId.get('fuel-1')?.odometer, 233589);
+  assert.equal(byId.get('fuel-1')?.distance, 590);
+  assert.equal(byId.get('fuel-1')?.kml, 8.34);
+
+  // Partial tank with explicit kmPerLiter must NOT be overwritten when distance is backfilled
+  const partialRefillResult = reconcileFuelLogsWithOdometer(
+    [
+      {
+        id: 'p-1',
+        date: '2026-10-30',
+        odometer: 233589,
+        distance: 590,
+        amount: 500,
+        liters: 11.74,
+        pricePerLiter: 42.59,
+        kml: 8.34,
+        note: 'ดีเซล',
+      },
+      {
+        id: 'p-2',
+        date: '2026-11-01',
+        odometer: 233661,
+        distance: 0, // missing distance -> should backfill +72
+        amount: 1000,
+        liters: 29.806,
+        pricePerLiter: 33.55,
+        kml: 0,
+        kmPerLiter: 13.39, // recorded via kmPerLiter alias -> must be kept!
+        note: 'Esso',
+      },
+    ],
+    { forceRecalculateAllKml: true }
+  );
+
+  assert.equal(getRecordedFuelKml(partialRefillResult.logs[1]), 13.39);
+  assert.equal(partialRefillResult.logs[1].distance, 72);
+  assert.equal(partialRefillResult.logs[1].kml, 13.39);
+
+  // Corrupted canonical seed entries self-heal back to actual values
+  const corrupted = SEED_VEHICLE_STATE.fuelLogs.map((l) => {
+    if (l.id === 'fuel-3') return { ...l, kml: 5.28 };
+    if (l.id === 'fuel-2') return { ...l, kml: 2.42 };
+    if (l.id === 'fuel-1') return { ...l, kml: 50.26 };
+    return l;
+  });
+  const healed = reconcileFuelLogsWithOdometer(corrupted, {
+    odometerLogs: SEED_VEHICLE_STATE.odometerLogs,
+    forceRecalculateAllKml: true,
+  });
+  const healedById = new Map(healed.logs.map((l) => [l.id, l]));
+  assert.equal(healedById.get('fuel-3')?.kml, 16.27);
+  assert.equal(healedById.get('fuel-2')?.kml, 13.39);
+  assert.equal(healedById.get('fuel-1')?.kml, 8.34);
+
+  // Skipped-cycle rows already having distance & kml (>22 or <4) do NOT trigger mismatchedCount
+  const skippedCycles = [
+    ...SEED_VEHICLE_STATE.fuelLogs,
+    {
+      id: 'old-skip-1',
+      date: '2026-10-15',
+      odometer: 232939,
+      distance: 620,
+      amount: 500,
+      liters: 15.15,
+      pricePerLiter: 33,
+      kml: 40.92,
+      note: 'PTT',
+    },
+    {
+      id: 'old-partial-2',
+      date: '2026-10-20',
+      odometer: 232999,
+      distance: 60,
+      amount: 1000,
+      liters: 30.3,
+      pricePerLiter: 33,
+      kml: 1.98,
+      note: 'บางจาก',
+    },
+  ];
+  const skippedCheck = reconcileFuelLogsWithOdometer(skippedCycles, {
+    forceRecalculateAllKml: true,
+  });
+  assert.equal(skippedCheck.mismatchedCount, 0);
 });
