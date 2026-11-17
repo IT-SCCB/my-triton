@@ -446,7 +446,7 @@ export function FuelFormModal({
                   />
                   {isFuelKmlOutOfRange(parsedEditKml) && (
                     <p className="text-[11px] text-slate-500">
-                      นอกช่วง {MIN_REALISTIC_KML}–{MAX_REALISTIC_KML} กม./ล. · ตารางจะแสดงเป็น “ไม่เต็มถัง / ข้ามรอบ” และไม่นำไปคิดค่าเฉลี่ยรวม
+                      นอกช่วง {MIN_REALISTIC_KML}–{MAX_REALISTIC_KML} กม./ล. · ตารางจะแสดงเป็นค่าเฉลี่ยแทน และไม่นำไปคิดค่าเฉลี่ยรวม
                     </p>
                   )}
                 </div>

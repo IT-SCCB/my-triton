@@ -1347,6 +1347,7 @@ export default function App() {
                   fuelLogs={state.fuelLogs}
                   odometerLogs={state.odometerLogs}
                   tankCapacityLiters={state.vehicle.tankCapacityLiters}
+                  averageKml={fuelStats.avgKml}
                   onOpenAddFuel={() => {
                     setOcrPrefill(null);
                     setEditingFuelLog(null);
@@ -1393,6 +1394,7 @@ export default function App() {
                   fuelLogs={state.fuelLogs}
                   odometerLogs={state.odometerLogs}
                   tankCapacityLiters={state.vehicle.tankCapacityLiters}
+                  averageKml={fuelStats.avgKml}
                   onOpenAddFuel={() => {
                     setOcrPrefill(null);
                     setEditingFuelLog(null);

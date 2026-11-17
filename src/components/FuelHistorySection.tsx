@@ -20,6 +20,7 @@ interface FuelHistorySectionProps {
   fuelLogs: FuelLogEntry[];
   odometerLogs?: OdometerLogEntry[];
   tankCapacityLiters?: number;
+  averageKml?: number;
   onOpenAddFuel: () => void;
   onEditFuelLog: (log: FuelLogEntry) => void;
   onDeleteFuelLog: (id: string) => Promise<void>;
@@ -30,6 +31,7 @@ export function FuelHistorySection({
   fuelLogs,
   odometerLogs = [],
   tankCapacityLiters = 75,
+  averageKml = 0,
   onOpenAddFuel,
   onEditFuelLog,
   onDeleteFuelLog,
@@ -101,7 +103,7 @@ export function FuelHistorySection({
             <span>ประวัติการเติมน้ำมันเชื้อเพลิง</span>
           </h2>
           <p className="text-sm text-slate-600 mt-0.5">
-            รอบปกติ ({MIN_REALISTIC_KML}–{MAX_REALISTIC_KML} กม./ลิตร) นำมาคิดค่าเฉลี่ย · รอบนอกช่วงแสดงเป็น “ไม่เต็มถัง / ข้ามรอบ” โดยยังนับระยะทางและยอดเงินจริงครบ ·{' '}
+            รอบปกติ ({MIN_REALISTIC_KML}–{MAX_REALISTIC_KML} กม./ลิตร) นำมาคิดค่าเฉลี่ย · รอบไม่เต็มถัง / ข้ามรอบ แสดงเป็นค่าเฉลี่ยรวมแทนตัวเลขที่เพี้ยน โดยยังนับระยะทางและยอดเงินจริงครบ ·{' '}
             <span className="font-mono tabular-nums text-slate-800">
               {sortedLogs.length} รอบ · รวม {formatKm(totalEffectiveDistance)} กม.
             </span>
@@ -279,12 +281,23 @@ export function FuelHistorySection({
                             data-testid={`fuel-kml-skipped-${log.id}`}
                             title={
                               effectiveDisplayKml > 0
-                                ? `คำนวณเบื้องต้นได้ ${effectiveDisplayKml.toFixed(2)} กม./ล. (อยู่นอกช่วงปกติ ${MIN_REALISTIC_KML}–${MAX_REALISTIC_KML} กม./ล.)`
-                                : 'ไม่ได้ระบุอัตราสิ้นเปลืองหรือไม่ได้เติมเต็มถัง'
+                                ? `คำนวณเบื้องต้นได้ ${effectiveDisplayKml.toFixed(2)} กม./ล. (อยู่นอกช่วงปกติ ${MIN_REALISTIC_KML}–${MAX_REALISTIC_KML} กม./ล.) · แสดงเป็นค่าเฉลี่ยรวมแทน`
+                                : 'ไม่ได้ระบุอัตราสิ้นเปลืองหรือไม่ได้เติมเต็มถัง · แสดงเป็นค่าเฉลี่ยรวมแทน'
                             }
                             className="font-sans text-xs sm:text-sm font-medium text-slate-500"
                           >
-                            ไม่เต็มถัง / ข้ามรอบ
+                            {averageKml > 0 ? (
+                              <>
+                                <span className="font-mono tabular-nums font-semibold text-slate-700">
+                                  ≈{averageKml.toFixed(2)} กม./ล.
+                                </span>
+                                <span className="block font-sans text-[11px] font-normal text-slate-500">
+                                  ไม่เต็มถัง / ข้ามรอบ · ใช้ค่าเฉลี่ย
+                                </span>
+                              </>
+                            ) : (
+                              'ไม่เต็มถัง / ข้ามรอบ'
+                            )}
                           </span>
                         ) : (
                           <>
