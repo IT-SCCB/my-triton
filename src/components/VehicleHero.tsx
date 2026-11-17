@@ -21,6 +21,7 @@ import type {
   MaintenanceScheduleItem,
   VehicleProfile,
 } from '../types/maintenance';
+import { normalizeVehicleImageUrl } from '../data/seedData';
 import {
   formatBaht,
   formatKm,
@@ -104,7 +105,7 @@ export function VehicleHero({
         <div className="lg:col-span-5 relative min-h-[210px] lg:min-h-[260px] bg-slate-100">
           {!imageError ? (
             <img
-              src={vehicle.imageUrl}
+              src={normalizeVehicleImageUrl(vehicle.imageUrl)}
               alt={`${vehicle.nickname} (${vehicle.make} ${vehicle.model} ${vehicle.engineSpec})`}
               referrerPolicy="no-referrer"
               onError={() => setImageError(true)}
