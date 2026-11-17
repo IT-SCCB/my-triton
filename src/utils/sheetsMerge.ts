@@ -138,11 +138,76 @@ export interface CloudSheetsPayload {
   fuelPercent?: unknown;
   fuelLogs?: unknown;
   maintenanceItems?: unknown;
+  maintenanceLogs?: unknown;
   fullState?: VehicleMaintenanceState;
   sheetFuelLogs?: unknown;
   sheetMaintenanceLogs?: unknown;
   vehicle?: VehicleMaintenanceState['vehicle'];
   services?: VehicleMaintenanceState['services'];
+}
+
+/** เปรียบเทียบชื่อรายการซ่อมแบบหลวมๆ: ตัวพิมพ์เล็ก + ตัดเครื่องหมาย : ( ) · + ช่องว่างซ้ำ
+ *  (ชื่อจากชีตกับในแอปอาจต่างกันเล็กน้อย เช่น "ระบบแอร์: ..." กับ "ระบบแอร์ (...)") */
+export function normalizeServiceTitleForCompare(raw: unknown): string {
+  return String(raw ?? '')
+    .toLowerCase()
+    .replace(/[:()·]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export interface NormalizedLegacyGasPayload {
+  sheetFuelLogs: Record<string, unknown>[];
+  sheetMaintenanceLogs: Record<string, unknown>[];
+}
+
+/**
+ * แปลง payload รูปแบบ legacy ที่ Google Apps Script ส่งกลับจริง
+ * ({ status, fuelLogs: [แถว array], maintenanceLogs: [แถว array] })
+ * เป็น sheetFuelLogs/sheetMaintenanceLogs แบบ object ที่ merge logic รู้จัก
+ * คืน null ถ้าไม่มีแถวแบบ array เลย (payload รูปแบบอื่นไม่โดนแตะ)
+ * แถวน้ำมัน: [วันที่ ISO, เลขไมล์, ระยะทาง, -, ราคา/ลิตร, ลิตร, กม./ล., -, -, -, ปั๊ม/หมายเหตุ]
+ * แถวซ่อม: [วันที่ ISO, รายการ, เลขไมล์, รอบระยะ กม., ค่าใช้จ่ายรวม, เลขไมล์รอบถัดไป, กม.คงเหลือ, สถานะ, หมายเหตุ]
+ * ยอดเงินของแถวน้ำมันไม่ได้อยู่ใน array — merge จะคำนวณจาก ลิตร × ราคา/ลิตร เอง
+ */
+export function normalizeLegacyGasPayload(
+  cloudPayload: unknown
+): NormalizedLegacyGasPayload | null {
+  if (!cloudPayload || typeof cloudPayload !== 'object') return null;
+  const data = cloudPayload as Record<string, unknown>;
+  const fuelRows = Array.isArray(data.fuelLogs) ? data.fuelLogs : [];
+  const maintenanceRows = Array.isArray(data.maintenanceLogs)
+    ? data.maintenanceLogs
+    : [];
+  const hasLegacyFuel = fuelRows.some((row) => Array.isArray(row));
+  const hasLegacyMaintenance = maintenanceRows.some((row) =>
+    Array.isArray(row)
+  );
+  if (!hasLegacyFuel && !hasLegacyMaintenance) return null;
+
+  return {
+    sheetFuelLogs: fuelRows
+      .filter((row): row is unknown[] => Array.isArray(row))
+      .map((row) => ({
+        isoDate: row[0],
+        odometer: row[1],
+        distance: row[2],
+        pricePerLiter: row[4],
+        liters: row[5],
+        kml: row[6],
+        note: row[10],
+      })),
+    sheetMaintenanceLogs: maintenanceRows
+      .filter((row): row is unknown[] => Array.isArray(row))
+      .map((row) => ({
+        isoDate: row[0],
+        title: row[1],
+        odometer: row[2],
+        intervalKm: row[3],
+        totalCost: row[4],
+        notes: row[8],
+      })),
+  };
 }
 
 export function hasImportableSheetsPayload(cloudData: unknown): boolean {
@@ -174,6 +239,15 @@ export function hasImportableSheetsPayload(cloudData: unknown): boolean {
   ) {
     return true;
   }
+  // รูปแบบ legacy จาก GAS: fuelLogs/maintenanceLogs เป็น array ของแถว
+  const legacy = normalizeLegacyGasPayload(cloudData);
+  if (
+    legacy &&
+    (legacy.sheetFuelLogs.length > 0 ||
+      legacy.sheetMaintenanceLogs.length > 0)
+  ) {
+    return true;
+  }
   return false;
 }
 
@@ -192,7 +266,28 @@ export function mergeSheetsPayloadIntoState(
     throw new Error('ไม่พบโครงสร้างข้อมูลที่รองรับจาก Google Sheets');
   }
 
-  const cloudData = cloudPayload as CloudSheetsPayload;
+  // รูปแบบ legacy จาก GAS: แปลงแถว array เป็น sheetFuelLogs/sheetMaintenanceLogs
+  // ก่อน แล้วใช้ logic เดิมต่อ (payload รูปแบบอื่นไม่โดนแตะ)
+  const rawPayload = cloudPayload as CloudSheetsPayload;
+  const legacy = normalizeLegacyGasPayload(cloudPayload);
+  const cloudData: CloudSheetsPayload = legacy
+    ? {
+        ...rawPayload,
+        sheetFuelLogs: [
+          ...(Array.isArray(rawPayload.sheetFuelLogs)
+            ? rawPayload.sheetFuelLogs
+            : []),
+          ...legacy.sheetFuelLogs,
+        ],
+        sheetMaintenanceLogs: [
+          ...(Array.isArray(rawPayload.sheetMaintenanceLogs)
+            ? rawPayload.sheetMaintenanceLogs
+            : []),
+          ...legacy.sheetMaintenanceLogs,
+        ],
+      }
+    : rawPayload;
+
   let next: VehicleMaintenanceState;
   let recognizedBase = false;
 
@@ -393,14 +488,25 @@ export function mergeSheetsPayloadIntoState(
         ).trim() || 'นำเข้าจาก Google Sheets';
       const incomingId = typeof item.id === 'string' && item.id.trim() ? item.id.trim() : '';
 
-      const normalizedTitle = title.toLowerCase();
-      const isDuplicate = next.services.some(
-        (existing) =>
-          (incomingId && existing.id === incomingId) ||
-          (existing.date === date &&
-            existing.odometer === odometer &&
-            existing.title.trim().toLowerCase() === normalizedTitle)
-      );
+      const normalizedTitle = normalizeServiceTitleForCompare(title);
+      const isDuplicate = next.services.some((existing) => {
+        if (incomingId && existing.id === incomingId) return true;
+        if (existing.date !== date || existing.odometer !== odometer) {
+          return false;
+        }
+        const existingNorm = normalizeServiceTitleForCompare(existing.title);
+        if (existingNorm === normalizedTitle) return true;
+        // ชื่อเดียวกันแต่ต่อท้ายต่างกันเล็กน้อย (เช่น "พร้อมค่าแรง") — ถือว่าเป็นรายการเดิม
+        const shorter =
+          existingNorm.length <= normalizedTitle.length
+            ? existingNorm
+            : normalizedTitle;
+        const longer =
+          existingNorm.length <= normalizedTitle.length
+            ? normalizedTitle
+            : existingNorm;
+        return shorter.length >= 8 && longer.includes(shorter);
+      });
       if (isDuplicate) continue;
 
       next.services.unshift({
