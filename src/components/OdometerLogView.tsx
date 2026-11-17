@@ -4,6 +4,7 @@ import type { OdometerLogEntry } from '../types/maintenance';
 import {
   formatKm,
   formatThaiDate,
+  getTodayIsoDate,
   sortOdometerLogs,
   validateOdometerInput,
 } from '../utils/maintenance';
@@ -31,7 +32,7 @@ export function OdometerLogView({
   onAddOdometerLog,
 }: OdometerLogViewProps) {
   const [odometer, setOdometer] = useState(String(currentOdometer));
-  const [date, setDate] = useState('2026-11-15');
+  const [date, setDate] = useState(() => getTodayIsoDate());
   const [source, setSource] = useState(SOURCE_OPTIONS[0]);
   const [note, setNote] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
