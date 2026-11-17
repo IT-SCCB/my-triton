@@ -16,6 +16,7 @@ import {
   mergeImportedPatch,
   type ImportedVehiclePatch,
 } from './src/utils/driveParser.ts';
+import { mergeSheetsPayloadIntoState } from './src/utils/sheetsMerge.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -465,46 +466,16 @@ async function startServer() {
 
   app.post('/api/sync-import', async (req, res) => {
     try {
-      const cloudData = req.body as Partial<VehicleMaintenanceState> & {
-        odometer?: number;
-        fuelPercent?: number;
-        fullState?: VehicleMaintenanceState;
-      };
       const current = await readState();
-      let nextState = current;
-
-      if (
-        cloudData.fullState &&
-        cloudData.fullState.vehicle &&
-        Array.isArray(cloudData.fullState.services)
-      ) {
-        nextState = cloudData.fullState;
-      } else if (
-        typeof cloudData.odometer === 'number' &&
-        Array.isArray(cloudData.fuelLogs)
-      ) {
-        nextState = {
-          ...current,
-          vehicle: {
-            ...current.vehicle,
-            currentOdometer: cloudData.odometer,
-            fuelPercent:
-              typeof cloudData.fuelPercent === 'number'
-                ? cloudData.fuelPercent
-                : current.vehicle.fuelPercent,
-          },
-          fuelLogs: cloudData.fuelLogs,
-        };
-      } else {
-        res.status(400).json({ error: 'ไม่พบโครงสร้างข้อมูลที่รองรับจาก Google Sheets' });
-        return;
-      }
-
-      await writeState(nextState);
-      res.json(nextState);
+      const merged = mergeSheetsPayloadIntoState(current, req.body);
+      await writeState(merged.state);
+      res.json(merged.state);
     } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'ไม่สามารถนำเข้าข้อมูลจาก Google Sheets ได้';
+      const isBadPayload = message.includes('ไม่พบโครงสร้างข้อมูล');
       console.error('Failed to import cloud sync state:', error);
-      res.status(500).json({ error: 'ไม่สามารถนำเข้าข้อมูลจาก Google Sheets ได้' });
+      res.status(isBadPayload ? 400 : 500).json({ error: message });
     }
   });
 
