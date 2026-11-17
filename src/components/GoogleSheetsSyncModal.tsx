@@ -1,16 +1,34 @@
 import { useEffect, useState } from 'react';
-import { Check, CloudDownload, CloudUpload, Copy, X } from 'lucide-react';
-import type { VehicleMaintenanceState } from '../types/maintenance';
-import { buildGasSyncPayload } from '../utils/maintenance';
+import {
+  Check,
+  CheckCircle2,
+  CloudDownload,
+  CloudUpload,
+  Copy,
+  RefreshCw,
+  X,
+} from 'lucide-react';
+import {
+  DEFAULT_GAS_WEBHOOK_URL,
+  formatLastSyncBadgeTime,
+  type GasSyncStatus,
+} from '../services/googleSheetsSync';
 
 interface GoogleSheetsSyncModalProps {
   isOpen: boolean;
-  state: VehicleMaintenanceState;
+  gasUrl: string;
+  autoSyncEnabled: boolean;
+  syncStatus: GasSyncStatus;
+  lastSyncAt: string | null;
+  lastDirection: 'pull' | 'push' | null;
   onClose: () => void;
-  onImportCloudState: (cloudPayload: unknown) => Promise<void>;
+  onChangeGasUrl: (url: string) => void;
+  onToggleAutoSync: (enabled: boolean) => void;
+  onManualSync: (
+    direction: 'push' | 'pull',
+    urlOverride?: string
+  ) => Promise<{ ok: boolean; message: string }>;
 }
-
-const GAS_URL_STORAGE = 'ouanpee_gas_webhook_url';
 
 const GAS_SCRIPT_CODE = `// Google Apps Script สำหรับ "อ้วนพี" (Mitsubishi Triton 2012)
 // เลขไมล์เริ่มทำเซอร์วิส 14 ก.ย. 2569 = 233,589 กม.
@@ -46,17 +64,17 @@ function doPost(e) {
 
 export function GoogleSheetsSyncModal({
   isOpen,
-  state,
+  gasUrl,
+  autoSyncEnabled,
+  syncStatus,
+  lastSyncAt,
+  lastDirection,
   onClose,
-  onImportCloudState,
+  onChangeGasUrl,
+  onToggleAutoSync,
+  onManualSync,
 }: GoogleSheetsSyncModalProps) {
-  const [gasUrl, setGasUrl] = useState(() => {
-    try {
-      return window.localStorage.getItem(GAS_URL_STORAGE) ?? '';
-    } catch {
-      return '';
-    }
-  });
+  const [urlInput, setUrlInput] = useState(gasUrl);
   const [status, setStatus] = useState<{ type: 'info' | 'success' | 'error'; text: string } | null>(
     null
   );
@@ -64,8 +82,16 @@ export function GoogleSheetsSyncModal({
   const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
+    setUrlInput(gasUrl);
+  }, [gasUrl]);
+
+  useEffect(() => {
     if (!isOpen) return;
     setStatus(null);
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose();
     }
@@ -76,12 +102,8 @@ export function GoogleSheetsSyncModal({
   if (!isOpen) return null;
 
   function handleUrlChange(val: string) {
-    setGasUrl(val);
-    try {
-      window.localStorage.setItem(GAS_URL_STORAGE, val.trim());
-    } catch {
-      // Ignore storage error
-    }
+    setUrlInput(val);
+    onChangeGasUrl(val);
   }
 
   async function handleCopyCode() {
@@ -95,7 +117,7 @@ export function GoogleSheetsSyncModal({
   }
 
   async function handleSync(direction: 'push' | 'pull') {
-    const trimmed = gasUrl.trim();
+    const trimmed = urlInput.trim();
     if (!trimmed) {
       setStatus({
         type: 'error',
@@ -104,6 +126,7 @@ export function GoogleSheetsSyncModal({
       return;
     }
 
+    onChangeGasUrl(trimmed);
     setSyncing(true);
     setStatus({
       type: 'info',
@@ -113,30 +136,15 @@ export function GoogleSheetsSyncModal({
           : 'กำลังดึงข้อมูลจาก Google Sheets...',
     });
 
-    try {
-      if (direction === 'push') {
-        const res = await fetch(trimmed, {
-          method: 'POST',
-          body: JSON.stringify(buildGasSyncPayload(state)),
-        });
-        const result = (await res.json()) as { status?: string; message?: string };
-        if (result.status !== 'success') {
-          throw new Error(result.message ?? 'ไม่สามารถบันทึกข้อมูลขึ้น Sheets ได้');
-        }
-        setStatus({ type: 'success', text: 'ส่งข้อมูลขึ้น Google Sheets สำเร็จเรียบร้อยแล้ว' });
-      } else {
-        const res = await fetch(trimmed);
-        const cloudData = (await res.json()) as unknown;
-        await onImportCloudState(cloudData);
-        setStatus({ type: 'success', text: 'ดึงข้อมูลจาก Google Sheets ลงแดชบอร์ดสำเร็จแล้ว' });
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'เชื่อมต่อไม่สำเร็จ';
-      setStatus({ type: 'error', text: `เชื่อมต่อไม่สำเร็จ: ${msg}` });
-    } finally {
-      setSyncing(false);
-    }
+    const result = await onManualSync(direction, trimmed);
+    setStatus({
+      type: result.ok ? 'success' : 'error',
+      text: result.message,
+    });
+    setSyncing(false);
   }
+
+  const formattedLastSync = lastSyncAt ? formatLastSyncBadgeTime(lastSyncAt) : '';
 
   return (
     <div
@@ -152,9 +160,24 @@ export function GoogleSheetsSyncModal({
         className="w-full max-w-2xl bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden flex flex-col max-h-[90vh]"
       >
         <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
-          <h2 id="sync-modal-title" className="font-display text-lg font-semibold text-slate-900">
-            ซิงค์ข้อมูล 2 ทางกับ Google Sheets
-          </h2>
+          <div>
+            <h2 id="sync-modal-title" className="font-display text-lg font-semibold text-slate-900">
+              ซิงค์ข้อมูล 2 ทางกับ Google Sheets
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {formattedLastSync
+                ? `ซิงค์ล่าสุดเมื่อ ${formattedLastSync}${
+                    lastDirection === 'pull'
+                      ? ' (ดึงจาก Sheets)'
+                      : lastDirection === 'push'
+                        ? ' (ส่งขึ้น Sheets)'
+                        : ''
+                  }`
+                : syncStatus === 'syncing'
+                  ? 'กำลังซิงค์ข้อมูล...'
+                  : 'ยังไม่มีประวัติการซิงค์'}
+            </p>
+          </div>
           <button
             type="button"
             onClick={onClose}
@@ -166,15 +189,28 @@ export function GoogleSheetsSyncModal({
         </div>
 
         <div className="p-5 space-y-4 overflow-y-auto">
-          <div className="space-y-1.5">
-            <label htmlFor="gas-webhook-url" className="block text-xs font-medium text-slate-700">
-              Google Apps Script Web App URL
-            </label>
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <label htmlFor="gas-webhook-url" className="block text-xs font-medium text-slate-700">
+                Google Apps Script Web App URL
+              </label>
+              {urlInput.trim() && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700">
+                  <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span>
+                    {DEFAULT_GAS_WEBHOOK_URL && urlInput.trim() === DEFAULT_GAS_WEBHOOK_URL
+                      ? 'ใช้ค่าตั้งต้นจากโค้ด + บันทึกในเครื่องแล้ว'
+                      : 'บันทึก URL ในเบราว์เซอร์แล้ว'}
+                  </span>
+                </span>
+              )}
+            </div>
+
             <div className="flex flex-col sm:flex-row gap-2">
               <input
                 id="gas-webhook-url"
                 type="url"
-                value={gasUrl}
+                value={urlInput}
                 onChange={(e) => handleUrlChange(e.target.value)}
                 placeholder="https://script.google.com/macros/s/.../exec"
                 className="flex-1 min-h-[42px] px-3 py-2 rounded-lg border border-slate-300 font-mono text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
@@ -183,6 +219,7 @@ export function GoogleSheetsSyncModal({
                 type="button"
                 disabled={syncing}
                 onClick={() => handleSync('push')}
+                data-testid="manual-push-sheets-btn"
                 className="inline-flex items-center justify-center gap-1.5 min-h-[42px] px-3.5 py-2 rounded-lg bg-blue-700 hover:bg-blue-800 disabled:opacity-60 text-white text-xs font-medium whitespace-nowrap shrink-0 cursor-pointer"
               >
                 <CloudUpload className="w-4 h-4" aria-hidden="true" />
@@ -192,12 +229,36 @@ export function GoogleSheetsSyncModal({
                 type="button"
                 disabled={syncing}
                 onClick={() => handleSync('pull')}
+                data-testid="manual-pull-sheets-btn"
                 className="inline-flex items-center justify-center gap-1.5 min-h-[42px] px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 disabled:opacity-60 text-white text-xs font-medium whitespace-nowrap shrink-0 cursor-pointer"
               >
                 <CloudDownload className="w-4 h-4" aria-hidden="true" />
                 <span>ดึงข้อมูลลงเครื่อง</span>
               </button>
             </div>
+          </div>
+
+          <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200 flex items-start justify-between gap-3">
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-900">
+                <RefreshCw className="w-3.5 h-3.5 text-blue-700 shrink-0" aria-hidden="true" />
+                <span>ซิงค์อัตโนมัติ (Auto Sync 2 ทาง)</span>
+              </div>
+              <p className="text-[11px] text-slate-600 leading-relaxed">
+                ดึงข้อมูลล่าสุดจาก Google Sheets ทันทีเมื่อเปิดหน้าเว็บ และส่งข้อมูลขึ้นเบื้องหลังอัตโนมัติทุกครั้งที่บันทึกเติมน้ำมัน อัปเดตเลขไมล์ หรือแก้ไขรายการซ่อมบำรุง
+              </p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer shrink-0 pt-0.5">
+              <input
+                type="checkbox"
+                checked={autoSyncEnabled}
+                onChange={(e) => onToggleAutoSync(e.target.checked)}
+                data-testid="toggle-gas-auto-sync"
+                className="sr-only peer"
+                aria-label="เปิดใช้งานซิงค์อัตโนมัติกับ Google Sheets"
+              />
+              <div className="w-9 h-5 bg-slate-300 peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-blue-600 rounded-full peer peer-checked:bg-blue-700 after:content-[''] after:absolute after:top-[4px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-4" />
+            </label>
           </div>
 
           {status && (
