@@ -5,6 +5,7 @@ import {
   extractFuelDataFromImage,
   hasGeminiKey,
 } from '../services/geminiClient';
+import { apiFetch, ServerUnavailableError, STATIC_MODE } from '../utils/serverApi';
 
 interface OcrScannerModalProps {
   isOpen: boolean;
@@ -57,7 +58,7 @@ export function OcrScannerModal({ isOpen, onClose, onExtracted }: OcrScannerModa
       return;
     }
 
-    if (!hasGeminiKey()) {
+    if (STATIC_MODE && !hasGeminiKey()) {
       setStatusMsg({
         type: 'error',
         text: 'สแกน AI ต้องใช้คีย์ Gemini (VITE_GEMINI_API_KEY) ซึ่งยังไม่ได้ตั้งค่าไว้ในหน้านี้ — กรอกข้อมูลด้วยตัวเองได้เลย',
@@ -72,8 +73,25 @@ export function OcrScannerModal({ isOpen, onClose, onExtracted }: OcrScannerModa
     });
 
     try {
-      // เรียก Gemini ตรงจากเบราว์เซอร์ (เดิมเรียกผ่าน /api/ocr บนเซิร์ฟเวอร์)
-      const extracted = await extractFuelDataFromImage(base64Data, mimeType);
+      let extracted: OcrExtractedFuelData;
+      try {
+        const res = await apiFetch('/api/ocr', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ base64Data, mimeType }),
+        });
+        if (!res.ok) {
+          const errBody = (await res.json().catch(() => ({}))) as { error?: string };
+          throw new Error(errBody.error || 'เกิดข้อผิดพลาดในการสแกนภาพ');
+        }
+        extracted = (await res.json()) as OcrExtractedFuelData;
+      } catch (err) {
+        if (err instanceof ServerUnavailableError) {
+          extracted = await extractFuelDataFromImage(base64Data, mimeType);
+        } else {
+          throw err;
+        }
+      }
       onExtracted(extracted);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการสแกนภาพ';

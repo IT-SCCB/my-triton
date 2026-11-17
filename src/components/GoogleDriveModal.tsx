@@ -31,6 +31,7 @@ import {
   type ImportedVehiclePatch,
 } from '../utils/driveParser';
 import { parseDriveFileWithGemini } from '../services/geminiClient';
+import { apiFetch, ServerUnavailableError } from '../utils/serverApi';
 import { formatBaht, formatKm, formatThaiDate } from '../utils/maintenance';
 
 interface GoogleDriveModalProps {
@@ -248,16 +249,36 @@ export function GoogleDriveModal({
       }
 
       if (!patch) {
-        // ไฟล์รูปภาพ / PDF หรือข้อความที่ไม่ตรงรูปแบบ ต้องใช้ AI แปลง
-        // (เดิมเรียกผ่าน /api/drive-parse บนเซิร์ฟเวอร์ — ตอนนี้เรียก Gemini ตรงจากเบราว์เซอร์)
-        // ไฟล์ JSON มาตรฐานจะถูก parse แบบ deterministic ข้างบนแล้ว จึงไม่ต้องใช้ AI
-        patch = await parseDriveFileWithGemini({
-          fileName: file.name,
-          mimeType: payload.effectiveMimeType,
-          kind: payload.kind,
-          textContent: payload.textContent,
-          base64Data: payload.base64Data,
-        });
+        try {
+          const res = await apiFetch('/api/drive-parse', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fileName: file.name,
+              mimeType: payload.effectiveMimeType,
+              kind: payload.kind,
+              textContent: payload.textContent,
+              base64Data: payload.base64Data,
+            }),
+          });
+          if (!res.ok) {
+            const errBody = (await res.json().catch(() => ({}))) as { error?: string };
+            throw new Error(errBody.error || 'ไม่สามารถวิเคราะห์ไฟล์ด้วย AI ได้');
+          }
+          patch = (await res.json()) as ImportedVehiclePatch;
+        } catch (err) {
+          if (err instanceof ServerUnavailableError) {
+            patch = await parseDriveFileWithGemini({
+              fileName: file.name,
+              mimeType: payload.effectiveMimeType,
+              kind: payload.kind,
+              textContent: payload.textContent,
+              base64Data: payload.base64Data,
+            });
+          } else {
+            throw err;
+          }
+        }
       }
 
       setPendingConfirmation({ file, patch });
