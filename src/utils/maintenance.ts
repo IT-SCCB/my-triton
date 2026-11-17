@@ -58,6 +58,12 @@ const THAI_MONTHS_SHORT = [
   'ธ.ค.',
 ];
 
+export function getTodayIsoDate(): string {
+  const now = new Date();
+  const offsetMs = now.getTimezoneOffset() * 60_000;
+  return new Date(now.getTime() - offsetMs).toISOString().slice(0, 10);
+}
+
 export function formatThaiDate(isoDate: string, style: 'short' | 'full' = 'short'): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate.trim());
   if (!match) return isoDate;
@@ -337,7 +343,16 @@ export function computeFleetHealthBanner(
   };
 }
 
-export const MAX_REALISTIC_KML = 30;
+export const MIN_REALISTIC_KML = 4;
+export const MAX_REALISTIC_KML = 22;
+
+export function isFuelKmlOutOfRange(kml: number): boolean {
+  return (
+    Number.isFinite(kml) &&
+    kml > 0 &&
+    (kml < MIN_REALISTIC_KML || kml > MAX_REALISTIC_KML)
+  );
+}
 
 export function isFuelKmlSpike(kml: number): boolean {
   return Number.isFinite(kml) && kml > MAX_REALISTIC_KML;
@@ -356,7 +371,11 @@ export function isFuelLitersOverTank(
 }
 
 export function isRealisticFuelKml(kml: number): boolean {
-  return Number.isFinite(kml) && kml > 0 && kml <= MAX_REALISTIC_KML;
+  return (
+    Number.isFinite(kml) &&
+    kml >= MIN_REALISTIC_KML &&
+    kml <= MAX_REALISTIC_KML
+  );
 }
 
 export function getFuelChartLogs(
@@ -364,13 +383,176 @@ export function getFuelChartLogs(
   options: { includeOutliers?: boolean; limit?: number | null } = {}
 ): FuelLogEntry[] {
   const { includeOutliers = false, limit = null } = options;
-  const filtered = sortFuelLogsChronological(fuelLogs).filter((l) =>
-    includeOutliers ? l.kml > 0 : isRealisticFuelKml(l.kml)
-  );
+  const chronological = sortFuelLogsChronological(fuelLogs);
+  const prevOdoById = buildFuelPrevOdometerMap(chronological);
+
+  const filtered = chronological
+    .map((l) => {
+      const recorded = getRecordedFuelKml(l);
+      if (recorded > 0) {
+        return recorded !== l.kml ? { ...l, kml: recorded } : l;
+      }
+      const prevOdo = prevOdoById.get(l.id);
+      const derived =
+        prevOdo !== undefined && l.odometer > prevOdo ? l.odometer - prevOdo : 0;
+      const effDist = l.distance > 0 ? l.distance : derived;
+      const formulaKml = computeFuelKmlFromFormula(effDist, l.liters);
+      return formulaKml > 0 ? { ...l, kml: formulaKml } : l;
+    })
+    .filter((l) => (includeOutliers ? l.kml > 0 : isRealisticFuelKml(l.kml)));
   if (typeof limit === 'number' && limit > 0 && filtered.length > limit) {
     return filtered.slice(-limit);
   }
   return filtered;
+}
+
+export function buildFuelPrevOdometerMap(
+  fuelLogs: FuelLogEntry[],
+  odometerLogs: OdometerLogEntry[] = []
+): Map<string, number> {
+  const chronological = sortFuelLogsChronological(fuelLogs);
+  const prevOdoById = new Map<string, number>();
+
+  for (let i = 1; i < chronological.length; i++) {
+    prevOdoById.set(chronological[i].id, chronological[i - 1].odometer);
+  }
+
+  // Fallback for the earliest fuel log ONLY if it has no distance recorded yet
+  const first = chronological[0];
+  if (first && first.distance === 0 && odometerLogs.length > 0) {
+    const validOdo = [...odometerLogs]
+      .filter(
+        (o) =>
+          o.odometer > 0 &&
+          o.odometer < first.odometer &&
+          (o.date < first.date || (o.date === first.date && o.odometer < first.odometer))
+      )
+      .sort((a, b) =>
+        a.date !== b.date ? a.date.localeCompare(b.date) : a.odometer - b.odometer
+      );
+    const baseline = validOdo[validOdo.length - 1];
+    if (baseline) {
+      prevOdoById.set(first.id, baseline.odometer);
+    }
+  }
+
+  return prevOdoById;
+}
+
+export interface ReconcileFuelLogsResult {
+  logs: FuelLogEntry[];
+  changedLogs: FuelLogEntry[];
+  missingDistanceCount: number;
+  mismatchedCount: number;
+}
+
+const CANONICAL_SEED_FUEL_KML: Record<
+  string,
+  { odometer: number; liters: number; distance: number; kml: number; badFormulaKml: number }
+> = {
+  'fuel-1': { odometer: 233589, liters: 11.74, distance: 590, kml: 8.34, badFormulaKml: 50.26 },
+  'fuel-2': { odometer: 233661, liters: 29.806, distance: 72, kml: 13.39, badFormulaKml: 2.42 },
+  'fuel-3': { odometer: 233850, liters: 35.768, distance: 189, kml: 16.27, badFormulaKml: 5.28 },
+};
+
+export function getRecordedFuelKml(
+  log: Pick<FuelLogEntry, 'kml' | 'kmPerLiter'>
+): number {
+  const kmPerLiter = Number(log.kmPerLiter ?? 0);
+  if (Number.isFinite(kmPerLiter) && kmPerLiter > 0) {
+    return kmPerLiter;
+  }
+  const kml = Number(log.kml ?? 0);
+  return Number.isFinite(kml) && kml > 0 ? kml : 0;
+}
+
+export function reconcileFuelLogsWithOdometer(
+  fuelLogs: FuelLogEntry[],
+  options: {
+    odometerLogs?: OdometerLogEntry[];
+    forceRecalculateAllKml?: boolean;
+  } = {}
+): ReconcileFuelLogsResult {
+  const { odometerLogs = [], forceRecalculateAllKml = false } = options;
+  const chronological = sortFuelLogsChronological(fuelLogs);
+  const prevOdoById = buildFuelPrevOdometerMap(chronological, odometerLogs);
+  const indexInChrono = new Map<string, number>();
+  chronological.forEach((item, idx) => indexInChrono.set(item.id, idx));
+
+  const updatedById = new Map<string, FuelLogEntry>();
+  const changedLogs: FuelLogEntry[] = [];
+  let missingDistanceCount = 0;
+  let mismatchedCount = 0;
+
+  for (const log of fuelLogs) {
+    const chronoIdx = indexInChrono.get(log.id) ?? 0;
+    const prevOdo = prevOdoById.get(log.id);
+    const hasDerived = prevOdo !== undefined && log.odometer > prevOdo;
+    const derivedDistance = hasDerived ? log.odometer - prevOdo : 0;
+
+    // For index > 0, consecutive fuel odometer difference is the true distance.
+    // For index 0, preserve positive distance if already stored; only backfill if distance === 0.
+    const targetDistance =
+      chronoIdx > 0
+        ? hasDerived
+          ? derivedDistance
+          : log.distance
+        : log.distance > 0
+          ? log.distance
+          : derivedDistance;
+
+    if (log.distance === 0 && targetDistance > 0) {
+      missingDistanceCount += 1;
+    }
+
+    const formulaKml = computeFuelKmlFromFormula(targetDistance, log.liters);
+    let recordedKml = getRecordedFuelKml(log);
+
+    // Self-heal canonical seed rows if they were previously overwritten with partial-tank division
+    const canonical = CANONICAL_SEED_FUEL_KML[log.id];
+    if (
+      canonical &&
+      log.odometer === canonical.odometer &&
+      Math.abs(log.liters - canonical.liters) < 0.005 &&
+      (recordedKml === 0 || Math.abs(recordedKml - canonical.badFormulaKml) < 0.05)
+    ) {
+      recordedKml = canonical.kml;
+    }
+
+    const hasValidRecordedKml = isRealisticFuelKml(recordedKml);
+
+    let nextKml = recordedKml;
+    // Preserve valid recorded km/L (4-22); compute from distance/liters when missing or when a previous spike resolves cleanly
+    if (!hasValidRecordedKml) {
+      if (
+        (log.distance === 0 && targetDistance > 0 && (recordedKml === 0 || isFuelKmlOutOfRange(recordedKml))) ||
+        (recordedKml === 0 && targetDistance > 0 && log.liters > 0 && forceRecalculateAllKml) ||
+        (isFuelKmlOutOfRange(recordedKml) && formulaKml > 0 && isRealisticFuelKml(formulaKml))
+      ) {
+        nextKml = Math.min(500, formulaKml);
+      }
+    }
+
+    if (targetDistance !== log.distance || nextKml !== log.kml) {
+      mismatchedCount += 1;
+      const updated: FuelLogEntry = {
+        ...log,
+        distance: targetDistance,
+        kml: nextKml,
+      };
+      updatedById.set(log.id, updated);
+      changedLogs.push(updated);
+    } else {
+      updatedById.set(log.id, log);
+    }
+  }
+
+  return {
+    logs: fuelLogs.map((l) => updatedById.get(l.id) ?? l),
+    changedLogs,
+    missingDistanceCount,
+    mismatchedCount,
+  };
 }
 
 export function computeFuelAnalytics(
@@ -378,25 +560,41 @@ export function computeFuelAnalytics(
   fuelPercent: number,
   tankCapacityLiters: number
 ): FuelAnalyticsSummary {
-  const sorted = [...fuelLogs].sort((a, b) => {
-    if (a.date !== b.date) return a.date.localeCompare(b.date);
-    return a.odometer - b.odometer;
-  });
+  const sorted = sortFuelLogsChronological(fuelLogs);
+  const prevOdoById = buildFuelPrevOdometerMap(sorted);
 
   const totalFuelCost = sorted.reduce((sum, l) => sum + Number(l.amount || 0), 0);
   const totalLiters = sorted.reduce((sum, l) => sum + Number(l.liters || 0), 0);
-  const totalDistance = sorted.reduce((sum, l) => sum + Number(l.distance || 0), 0);
+  const totalDistance = sorted.reduce((sum, l) => {
+    const prevOdo = prevOdoById.get(l.id);
+    const derived =
+      prevOdo !== undefined && l.odometer > prevOdo ? l.odometer - prevOdo : 0;
+    return sum + Number(l.distance > 0 ? l.distance : derived);
+  }, 0);
 
-  const realisticKmlLogs = sorted.filter((l) => isRealisticFuelKml(l.kml));
-  const fallbackKmlLogs = sorted.filter((l) => l.kml > 0);
-  const kmlSample = realisticKmlLogs.length > 0 ? realisticKmlLogs : fallbackKmlLogs;
+  const getEffectiveKml = (l: FuelLogEntry): number => {
+    const recorded = getRecordedFuelKml(l);
+    if (recorded > 0) return recorded;
+    const prevOdo = prevOdoById.get(l.id);
+    const derived =
+      prevOdo !== undefined && l.odometer > prevOdo ? l.odometer - prevOdo : 0;
+    const effDist = l.distance > 0 ? l.distance : derived;
+    return computeFuelKmlFromFormula(effDist, l.liters);
+  };
+
+  // Include only realistic cycles (4 to 22 km/L) in overall average efficiency
+  const realisticKmlLogs = sorted.filter((l) =>
+    isRealisticFuelKml(getEffectiveKml(l))
+  );
 
   const avgKml =
-    kmlSample.length > 0
-      ? kmlSample.reduce((sum, l) => sum + Number(l.kml), 0) / kmlSample.length
+    realisticKmlLogs.length > 0
+      ? realisticKmlLogs.reduce((sum, l) => sum + getEffectiveKml(l), 0) /
+        realisticKmlLogs.length
       : 0;
   const lastLog = sorted[sorted.length - 1];
-  const lastKml = lastLog ? Number(lastLog.kml) : 0;
+  const lastRealisticLog = realisticKmlLogs[realisticKmlLogs.length - 1];
+  const lastKml = lastRealisticLog ? getEffectiveKml(lastRealisticLog) : 0;
   const lastPricePerLiter = lastLog ? Number(lastLog.pricePerLiter) : 33.55;
   const costPerKm = avgKml > 0 ? lastPricePerLiter / avgKml : 0;
   const clampedPct = Math.max(0, Math.min(100, fuelPercent));
