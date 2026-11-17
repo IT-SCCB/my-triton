@@ -49,6 +49,7 @@ export interface FuelLogEntry {
   liters: number;
   pricePerLiter: number;
   kml: number;
+  kmPerLiter?: number;
   note: string;
 }
 
