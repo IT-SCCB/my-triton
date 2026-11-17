@@ -21,15 +21,18 @@ import type {
   ServiceRecord,
 } from '../types/maintenance';
 import {
+  computeFuelKmlFromFormula,
   computeMaintenanceCostTrend,
   computeOdometerTrend,
   formatBaht,
   formatKm,
   formatThaiDate,
   getFuelChartLogs,
-  isFuelKmlSpike,
+  getRecordedFuelKml,
+  isFuelKmlOutOfRange,
   isRealisticFuelKml,
   MAX_REALISTIC_KML,
+  MIN_REALISTIC_KML,
   sortFuelLogsChronological,
 } from '../utils/maintenance';
 
@@ -100,8 +103,8 @@ function CustomFuelTooltip({ active, payload }: FuelTooltipProps) {
       </p>
 
       {item.isAnomaly && (
-        <p className="text-[11px] font-medium text-amber-300">
-          ค่าผิดปกติ (&gt;{MAX_REALISTIC_KML} กม./ล.) · คลิกปุ่มแก้ไขด้านล่างเพื่อปรับปรุงได้
+        <p className="text-[11px] font-medium text-slate-300">
+          ไม่เต็มถัง / ข้ามรอบ (นอกช่วง {MIN_REALISTIC_KML}–{MAX_REALISTIC_KML} กม./ล. · ไม่นำมาคิดค่าเฉลี่ย)
         </p>
       )}
     </div>
@@ -351,10 +354,14 @@ export function AnalyticsSection({
   const [trendRange, setTrendRange] = useState<'12m' | '6m'>('12m');
   const [odometerRange, setOdometerRange] = useState<'all' | '90d' | '30d'>('all');
 
-  const outlierLogs = sortFuelLogsChronological(fuelLogs).filter((l) =>
-    isFuelKmlSpike(l.kml)
-  );
-  const totalPositiveCount = fuelLogs.filter((l) => l.kml > 0).length;
+  const chronologicalAll = sortFuelLogsChronological(fuelLogs);
+  const outlierLogs = chronologicalAll.filter((l) => {
+    const kml = getRecordedFuelKml(l) || computeFuelKmlFromFormula(l.distance, l.liters);
+    return isFuelKmlOutOfRange(kml);
+  });
+  const totalPositiveCount = chronologicalAll.filter(
+    (l) => (getRecordedFuelKml(l) || computeFuelKmlFromFormula(l.distance, l.liters)) > 0
+  ).length;
 
   const chartLogs = getFuelChartLogs(fuelLogs, {
     includeOutliers: showOutliers,
@@ -364,7 +371,7 @@ export function AnalyticsSection({
   const fuelChartData: FuelChartPoint[] = chartLogs.map((l) => ({
     ...l,
     shortDate: formatThaiDate(l.date, 'short'),
-    isAnomaly: isFuelKmlSpike(l.kml),
+    isAnomaly: isFuelKmlOutOfRange(l.kml),
   }));
 
   const selectedLog =
@@ -565,12 +572,12 @@ export function AnalyticsSection({
               data-testid="fuel-outlier-banner"
               className="pt-2.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs"
             >
-              <div className="flex items-center gap-1.5 text-amber-800">
-                <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" aria-hidden="true" />
+              <div className="flex items-center gap-1.5 text-slate-600">
+                <AlertTriangle className="w-3.5 h-3.5 text-slate-500 shrink-0" aria-hidden="true" />
                 <span>
                   {showOutliers
-                    ? `กำลังแสดงรวมค่าผิดปกติ ${outlierLogs.length} รายการ (> ${MAX_REALISTIC_KML} กม./ล.)`
-                    : `ซ่อนค่ากระโดดผิดปกติ ${outlierLogs.length} รายการ (สูงสุด ${Math.max(...outlierLogs.map((l) => l.kml)).toFixed(2)} กม./ล.) เพื่อให้กราฟอ่านง่าย`}
+                    ? `กำลังแสดงรวมรอบไม่เต็มถัง / ข้ามรอบ ${outlierLogs.length} รายการ (นอกช่วง ${MIN_REALISTIC_KML}–${MAX_REALISTIC_KML} กม./ล.)`
+                    : `ซ่อนรอบไม่เต็มถัง / ข้ามรอบ ${outlierLogs.length} รายการ (นอกช่วง ${MIN_REALISTIC_KML}–${MAX_REALISTIC_KML} กม./ล.) เพื่อให้กราฟและค่าเฉลี่ยตรงสมรรถนะจริง`}
                 </span>
               </div>
               <div className="flex flex-wrap items-center gap-3">
@@ -580,7 +587,9 @@ export function AnalyticsSection({
                   onClick={() => setShowOutliers((prev) => !prev)}
                   className="font-medium text-slate-700 hover:text-slate-900 underline underline-offset-2 cursor-pointer"
                 >
-                  {showOutliers ? 'กรองค่าผิดปกติออก' : 'ดูกราฟแบบรวมค่าผิดปกติ'}
+                  {showOutliers
+                    ? `แสดงเฉพาะรอบปกติ (${MIN_REALISTIC_KML}–${MAX_REALISTIC_KML} กม./ล.)`
+                    : 'ดูกราฟแบบรวมรอบข้าม'}
                 </button>
                 {onEditFuelLog && (
                   <button
@@ -589,7 +598,7 @@ export function AnalyticsSection({
                     onClick={() => onEditFuelLog(outlierLogs[0])}
                     className="font-medium text-blue-700 hover:text-blue-900 cursor-pointer"
                   >
-                    แก้ไขรายการที่กระโดด
+                    ตรวจสอบรายการ
                   </button>
                 )}
               </div>
