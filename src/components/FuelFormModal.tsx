@@ -7,7 +7,10 @@ import {
   findPreviousFuelLog,
   formatKm,
   formatThaiDate,
-  isFuelKmlSpike,
+  getTodayIsoDate,
+  isFuelKmlOutOfRange,
+  MAX_REALISTIC_KML,
+  MIN_REALISTIC_KML,
   sortFuelLogsChronological,
   validateFuelInput,
 } from '../utils/maintenance';
@@ -44,7 +47,7 @@ export function FuelFormModal({
   onClose,
   onSubmit,
 }: FuelFormModalProps) {
-  const [date, setDate] = useState('2026-11-15');
+  const [date, setDate] = useState(() => getTodayIsoDate());
   const [odometer, setOdometer] = useState(String(defaultOdometer));
   const [amount, setAmount] = useState('');
   const [pricePerLiter, setPricePerLiter] = useState('33.55');
@@ -71,21 +74,30 @@ export function FuelFormModal({
     setErrorMsg(null);
 
     if (editingFuelLog) {
+      const recordedKml = Number(
+        editingFuelLog.kml > 0 ? editingFuelLog.kml : editingFuelLog.kmPerLiter ?? 0
+      );
+      const rawFormula = computeFuelKmlFromFormula(
+        editingFuelLog.distance,
+        editingFuelLog.liters
+      );
+      const matchesFormula =
+        recordedKml > 0 && rawFormula > 0 && Math.abs(recordedKml - rawFormula) < 0.05;
       setDate(editingFuelLog.date);
       setOdometer(String(editingFuelLog.odometer));
       setAmount(String(editingFuelLog.amount));
       setPricePerLiter(String(editingFuelLog.pricePerLiter));
       setLiters(String(editingFuelLog.liters));
       setDistanceOverride(String(editingFuelLog.distance));
-      setKmlOverride(String(editingFuelLog.kml));
-      setAutoCalcKml(editingFuelLog.kml !== 0);
+      setKmlOverride(String(recordedKml));
+      setAutoCalcKml(matchesFormula);
       setNote(editingFuelLog.note);
       setFuelPercent('');
       setLitersEditedManually(true);
       return;
     }
 
-    setDate('2026-11-15');
+    setDate(getTodayIsoDate());
     setLitersEditedManually(false);
     setDistanceOverride('');
     setKmlOverride('');
@@ -427,11 +439,16 @@ export function FuelFormModal({
                       setKmlOverride(e.target.value);
                     }}
                     className={`w-full min-h-[40px] px-3 py-2 rounded-lg border font-mono text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-600 ${
-                      isFuelKmlSpike(parsedEditKml)
-                        ? 'border-amber-400 bg-amber-50 text-amber-900'
+                      isFuelKmlOutOfRange(parsedEditKml)
+                        ? 'border-slate-300 bg-slate-100 text-slate-700'
                         : 'border-slate-300 bg-white text-slate-900'
                     }`}
                   />
+                  {isFuelKmlOutOfRange(parsedEditKml) && (
+                    <p className="text-[11px] text-slate-500">
+                      นอกช่วง {MIN_REALISTIC_KML}–{MAX_REALISTIC_KML} กม./ล. · ตารางจะแสดงเป็น “ไม่เต็มถัง / ข้ามรอบ” และไม่นำไปคิดค่าเฉลี่ยรวม
+                    </p>
+                  )}
                 </div>
               </div>
 
