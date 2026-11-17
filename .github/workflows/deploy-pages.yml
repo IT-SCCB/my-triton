@@ -9,7 +9,8 @@
 # - VITE_GEMINI_API_KEY (optional) มาจาก GitHub Secrets — ถ้าไม่มี secret
 #   build ก็ต้องผ่าน และปุ่มสแกน OCR จะแสดงข้อความภาษาไทยบอกว่ายังไม่ได้ตั้งค่าคีย์
 #   (ดู DEPLOY_STEPS.md)
-
+# - VITE_GAS_WEBHOOK_URL (optional) มาจาก GitHub Secrets — ถ้าไม่มี secret
+#   แอปจะถือว่าไม่ได้ตั้งค่า Sheets auto-pull ไว้ ไม่ crash
 name: Deploy to GitHub Pages
 
 on:
@@ -32,23 +33,24 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
-
       - name: Install dependencies
-        run: npm ci
-
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install --no-audit --no-fund
+          fi
       - name: Build static site for GitHub Pages
         run: npm run build
         env:
           VITE_PAGES_BUILD: 'true'
+          VITE_GAS_WEBHOOK_URL: ${{ secrets.VITE_GAS_WEBHOOK_URL }}
           # Secret นี้ตั้งหรือไม่ตั้งก็ได้ — ไม่มี secret build ก็ผ่าน
           VITE_GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY }}
-
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
