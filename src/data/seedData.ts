@@ -1,20 +1,23 @@
 import type { VehicleMaintenanceState } from '../types/maintenance';
-import tritonImageUrl from '../assets/images/triton_2012_pickup_1794729642461.jpg';
 
-/**
- * รูปหลักของรถ — import ผ่าน Vite เพื่อให้ build ใส่ base path ที่ถูกต้อง
- * (เช่น /my-triton/assets/... บน GitHub Pages) แทน path แบบเก่า
- * '/src/assets/images/...' ซึ่งไฟล์ไม่ได้ถูก copy ลง dist จึง 404
- */
-export const DEFAULT_TRUCK_IMAGE_URL = tritonImageUrl;
+const BASE_URL =
+  typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL
+    ? import.meta.env.BASE_URL
+    : '/';
 
-/** path แบบเก่าที่เคยเก็บใน Firestore / localStorage — ใช้ตรวจเพื่อแปลงเป็น path ใหม่ */
+export const DEFAULT_TRUCK_IMAGE_URL = `${BASE_URL}images/triton_2012_pickup_1794729642461.jpg`;
 export const LEGACY_TRUCK_IMAGE_URL =
   '/src/assets/images/triton_2012_pickup_1794729642461.jpg';
 
-/** แปลง imageUrl เก่า/ว่างให้เป็น URL รูปที่โหลดได้จริงใน build ปัจจุบัน */
 export function normalizeVehicleImageUrl(url: string | undefined | null): string {
-  if (!url || url === LEGACY_TRUCK_IMAGE_URL) return DEFAULT_TRUCK_IMAGE_URL;
+  if (
+    !url ||
+    url === LEGACY_TRUCK_IMAGE_URL ||
+    url === '/images/triton_2012_pickup_1794729642461.jpg' ||
+    url === '/my-triton/images/triton_2012_pickup_1794729642461.jpg'
+  ) {
+    return DEFAULT_TRUCK_IMAGE_URL;
+  }
   return url;
 }
 
