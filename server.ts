@@ -1,9 +1,18 @@
 import 'dotenv/config';
 import express from 'express';
+import http from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { GoogleGenAI, Type } from '@google/genai';
+import {
+  GoogleGenAI,
+  Modality,
+  Type,
+  type Content,
+  type GenerateContentResponse,
+  type LiveServerMessage,
+} from '@google/genai';
+import { WebSocket, WebSocketServer } from 'ws';
 import { SEED_VEHICLE_STATE } from './src/data/seedData.ts';
 import type {
   FuelLogEntry,
@@ -704,6 +713,153 @@ async function startServer() {
     }
   });
 
+  function buildAssistantSystemInstruction(
+    vehicleState: VehicleMaintenanceState,
+    clientContext?: Record<string, unknown>,
+    isVoiceMode = false
+  ): string {
+    const fuelLogs = [...vehicleState.fuelLogs].sort((a, b) =>
+      b.date !== a.date ? b.date.localeCompare(a.date) : b.odometer - a.odometer
+    );
+    const latestFuel = fuelLogs[0];
+    const recentServices = [...vehicleState.services]
+      .sort((a, b) => (b.date !== a.date ? b.date.localeCompare(a.date) : b.odometer - a.odometer))
+      .slice(0, 6);
+
+    const ctx = clientContext ?? {};
+    const avgKml =
+      typeof ctx.avgKml === 'number' && ctx.avgKml > 0 ? `${ctx.avgKml.toFixed(2)} กม./ลิตร` : 'ยังไม่มีข้อมูลเฉลี่ย';
+    const lastPrice =
+      typeof ctx.lastPricePerLiter === 'number' && ctx.lastPricePerLiter > 0
+        ? `${ctx.lastPricePerLiter.toFixed(2)} บาท/ลิตร`
+        : latestFuel
+          ? `${latestFuel.pricePerLiter.toFixed(2)} บาท/ลิตร`
+          : '33.55 บาท/ลิตร';
+
+    const schedulesText = Array.isArray(ctx.schedulesSummary)
+      ? (ctx.schedulesSummary as Array<{ label?: string; remainingKm?: number; nextDueKm?: number; status?: string }>)
+          .map(
+            (s) =>
+              `- ${s.label ?? 'รายการซ่อม'}: ครบกำหนดที่ ${s.nextDueKm ?? '-'} กม. (คงเหลือ ${s.remainingKm ?? '-'} กม., สถานะ: ${s.status ?? 'nominal'})`
+          )
+          .join('\n')
+      : 'ไม่มีข้อมูลตารางรอบซ่อม';
+
+    const tripPlanText =
+      ctx.activeTrip && typeof ctx.activeTrip === 'object'
+        ? JSON.stringify(ctx.activeTrip)
+        : null;
+
+    const servicesText = recentServices
+      .map(
+        (s) =>
+          `- ${s.date}: ${s.title} ที่ไมล์ ${s.odometer} กม. (${s.totalCost} บาท${s.notes ? `, หมายเหตุ: ${s.notes}` : ''})`
+      )
+      .join('\n');
+
+    return [
+      `คุณคือ "ผู้ช่วยช่างและวางแผนทริปประจำรถอ้วนพี" สำหรับรถกระบะ ${vehicleState.vehicle.make} ${vehicleState.vehicle.model} ปี ${vehicleState.vehicle.year} (${vehicleState.vehicle.engineSpec})`,
+      'หน้าที่ของคุณคือตอบคำถามเรื่องการบำรุงรักษารถยนต์ การวางแผนเดินทาง คำนวณค่าน้ำมัน การเช็กรายการอะไหล่ตามระยะไมล์ และคำแนะนำด้านเทคนิคของเครื่องยนต์ดีเซล 2.5 DI-D อย่างเป็นกันเอง ชัดเจน และแม่นยำเป็นภาษาไทย',
+      '',
+      'ข้อมูลรถล่าสุดจากสมุดบันทึก:',
+      `- เลขไมล์ปัจจุบัน: ${vehicleState.vehicle.currentOdometer.toLocaleString('th-TH')} กม. (อัปเดต ${vehicleState.vehicle.lastUpdatedDate})`,
+      `- ความจุถังน้ำมัน: ${vehicleState.vehicle.tankCapacityLiters} ลิตร | น้ำมันคงเหลือในถัง: ${vehicleState.vehicle.fuelPercent}% (~${((vehicleState.vehicle.fuelPercent / 100) * vehicleState.vehicle.tankCapacityLiters).toFixed(1)} ลิตร)`,
+      `- อัตราสิ้นเปลืองเฉลี่ยจริง: ${avgKml} | ราคาน้ำมันล่าสุด: ${lastPrice}`,
+      '',
+      'ตารางซ่อมบำรุงตามระยะที่กำลังติดตาม:',
+      schedulesText,
+      '',
+      'ประวัติเซอร์วิสล่าสุด:',
+      servicesText || '- ยังไม่มีประวัติเซอร์วิส',
+      tripPlanText ? `\nแผนการเดินทางที่ผู้ใช้กำลังคำนวณอยู่ในขณะนี้:\n${tripPlanText}` : '',
+      '',
+      isVoiceMode
+        ? 'โหมดสนทนาด้วยเสียงสด: ตอบเป็นภาษาไทยที่ฟังเป็นธรรมชาติ กระชับ ชัดเจน ไม่ยาวเยิ่นเย้อ เหมาะสำหรับการสนทนาโต้ตอบระหว่างขับรถหรือเตรียมออกทริป ไม่ต้องอ่านสัญลักษณ์ markdown เช่น ดอกจัน หรือขีดกลาง'
+        : 'ตอบเป็นภาษาไทยที่อ่านง่าย เป็นระบบ อ้างอิงตัวเลขจริงของรถคันนี้เสมอเมื่อเกี่ยวข้อง และเตือนล่วงหน้าหากระยะทางที่ถามจะทำให้ถึงรอบซ่อมบำรุง',
+    ]
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  app.post('/api/chat', async (req, res) => {
+    try {
+      const { messages, modelMode, vehicleContext } = req.body as {
+        messages?: Array<{ role: 'user' | 'model'; text: string }>;
+        modelMode?: 'standard' | 'fast';
+        vehicleContext?: Record<string, unknown>;
+      };
+
+      if (!Array.isArray(messages) || messages.length === 0) {
+        res.status(400).json({ error: 'กรุณาพิมพ์ข้อความที่ต้องการสนทนา' });
+        return;
+      }
+
+      const ai = getGeminiClient();
+      if (!ai) {
+        res.status(503).json({
+          error:
+            'ยังไม่ได้ตั้งค่า GEMINI_API_KEY ใน Settings > Secrets ของโปรเจกต์ กรุณาตั้งค่าคีย์ก่อนใช้งานผู้ช่วย AI',
+        });
+        return;
+      }
+
+      const latest = messages[messages.length - 1];
+      if (!latest || latest.role !== 'user' || !latest.text?.trim()) {
+        res.status(400).json({ error: 'ข้อความล่าสุดของผู้ใช้ไม่ถูกต้อง' });
+        return;
+      }
+
+      const history: Content[] = messages
+        .slice(0, -1)
+        .filter((m) => (m.role === 'user' || m.role === 'model') && m.text?.trim())
+        .map((m) => ({
+          role: m.role,
+          parts: [{ text: m.text }],
+        }));
+
+      const state = await readState();
+      const systemInstruction = buildAssistantSystemInstruction(state, vehicleContext, false);
+      const model = modelMode === 'fast' ? 'gemini-3.1-flash-lite' : 'gemini-4-hydrogen';
+
+      res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
+      res.setHeader('Connection', 'keep-alive');
+      res.flushHeaders?.();
+
+      const chat = ai.chats.create({
+        model,
+        history,
+        config: {
+          systemInstruction,
+        },
+      });
+
+      const streamResponse = await chat.sendMessageStream({
+        message: latest.text.trim(),
+      });
+
+      for await (const chunk of streamResponse) {
+        const c = chunk as GenerateContentResponse;
+        const delta = c.text ?? '';
+        if (delta) {
+          res.write(`data: ${JSON.stringify({ text: delta })}\n\n`);
+        }
+      }
+
+      res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+      res.end();
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการสนทนากับ Gemini AI';
+      console.error('Gemini chat error:', error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: `ผู้ช่วย AI ตอบไม่สำเร็จ: ${msg}` });
+      } else {
+        res.write(`data: ${JSON.stringify({ error: `ผู้ช่วย AI ตอบไม่สำเร็จ: ${msg}` })}\n\n`);
+        res.end();
+      }
+    }
+  });
+
   const isProd = process.env.NODE_ENV === 'production';
   if (isProd) {
     const distDir = path.join(__dirname, 'dist');
@@ -720,7 +876,162 @@ async function startServer() {
     app.use(vite.middlewares);
   }
 
-  app.listen(port, '0.0.0.0', () => {
+  const httpServer = http.createServer(app);
+  const wss = new WebSocketServer({ server: httpServer, path: '/api/live' });
+
+  wss.on('connection', (clientWs: WebSocket) => {
+    let liveSession: Awaited<ReturnType<GoogleGenAI['live']['connect']>> | null = null;
+    let isClosed = false;
+    let connecting = false;
+
+    const safeSend = (payload: Record<string, unknown>) => {
+      if (clientWs.readyState === WebSocket.OPEN) {
+        clientWs.send(JSON.stringify(payload));
+      }
+    };
+
+    const connectLiveSession = async (vehicleContext?: Record<string, unknown>) => {
+      if (connecting || liveSession || isClosed) return;
+      connecting = true;
+
+      const ai = getGeminiClient();
+      if (!ai) {
+        safeSend({
+          type: 'error',
+          error:
+            'ยังไม่ได้ตั้งค่า GEMINI_API_KEY ใน Settings > Secrets ของโปรเจกต์ กรุณาตั้งค่าคีย์ก่อนใช้งานโหมดสนทนาเสียงสด',
+        });
+        clientWs.close();
+        return;
+      }
+
+      try {
+        const state = await readState();
+        const systemInstruction = buildAssistantSystemInstruction(state, vehicleContext, true);
+
+        const session = await ai.live.connect({
+          model: 'gemini-3.8-live',
+          config: {
+            responseModalities: [Modality.AUDIO],
+            speechConfig: {
+              voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } },
+            },
+            inputAudioTranscription: {},
+            outputAudioTranscription: {},
+            systemInstruction,
+          },
+          callbacks: {
+            onmessage: (message: LiveServerMessage) => {
+              const content = message.serverContent;
+              if (content?.inputTranscription?.text) {
+                safeSend({
+                  type: 'inputTranscript',
+                  text: content.inputTranscription.text,
+                });
+              }
+              if (content?.outputTranscription?.text) {
+                safeSend({
+                  type: 'outputTranscript',
+                  text: content.outputTranscription.text,
+                });
+              }
+              for (const part of content?.modelTurn?.parts ?? []) {
+                if (part.inlineData?.data) {
+                  safeSend({
+                    type: 'audio',
+                    data: part.inlineData.data,
+                  });
+                }
+              }
+              if (content?.interrupted) {
+                safeSend({ type: 'interrupted' });
+              }
+              if (content?.turnComplete) {
+                safeSend({ type: 'turnComplete' });
+              }
+            },
+            onerror: (err: unknown) => {
+              const msg =
+                err instanceof Error
+                  ? err.message
+                  : typeof err === 'object' && err !== null && 'message' in err
+                    ? String((err as { message?: unknown }).message)
+                    : 'เกิดข้อผิดพลาดในการเชื่อมต่อ Gemini Live';
+              console.error('Gemini Live session error:', err);
+              safeSend({ type: 'error', error: msg });
+            },
+            onclose: () => {
+              if (!isClosed) {
+                safeSend({ type: 'closed' });
+              }
+            },
+          },
+        });
+
+        if (isClosed) {
+          session.close();
+          return;
+        }
+        liveSession = session;
+        safeSend({ type: 'ready' });
+      } catch (err) {
+        const msg =
+          err instanceof Error
+            ? err.message
+            : 'ไม่สามารถเริ่มเซสชันสนทนาด้วยเสียง Gemini Live ได้';
+        console.error('Failed to initialize Gemini Live:', err);
+        safeSend({ type: 'error', error: msg });
+        clientWs.close();
+      } finally {
+        connecting = false;
+      }
+    };
+
+    clientWs.on('message', (raw) => {
+      try {
+        const parsed = JSON.parse(raw.toString()) as {
+          type?: string;
+          data?: string;
+          text?: string;
+          vehicleContext?: Record<string, unknown>;
+        };
+
+        if (parsed.type === 'setup') {
+          void connectLiveSession(parsed.vehicleContext);
+          return;
+        }
+
+        if (parsed.type === 'audio' && parsed.data && liveSession) {
+          liveSession.sendRealtimeInput({
+            audio: { data: parsed.data, mimeType: 'audio/pcm;rate=16000' },
+          });
+          return;
+        }
+
+        if (parsed.type === 'text' && parsed.text && liveSession) {
+          liveSession.sendRealtimeInput({
+            text: parsed.text,
+          });
+        }
+      } catch (err) {
+        console.error('Live WS message handling error:', err);
+      }
+    });
+
+    clientWs.on('close', () => {
+      isClosed = true;
+      if (liveSession) {
+        try {
+          liveSession.close();
+        } catch {
+          // Ignore close errors
+        }
+        liveSession = null;
+      }
+    });
+  });
+
+  httpServer.listen(port, '0.0.0.0', () => {
     console.log(`Server running on http://0.0.0.0:${port}`);
   });
 }

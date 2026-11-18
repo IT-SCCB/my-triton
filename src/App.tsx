@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { User } from 'firebase/auth';
 import { RotateCcw } from 'lucide-react';
+import { AiAssistantDrawer } from './components/AiAssistantDrawer';
 import { AnalyticsSection } from './components/AnalyticsSection';
 import { FuelFormModal } from './components/FuelFormModal';
 import { FuelHistorySection } from './components/FuelHistorySection';
@@ -16,6 +17,7 @@ import { ServiceHistoryTable } from './components/ServiceHistoryTable';
 import { SheetsSyncStatusBadge } from './components/SheetsSyncStatusBadge';
 import { StatusBanner } from './components/StatusBanner';
 import { TopBar, type ActiveTab } from './components/TopBar';
+import { TripPlannerSection } from './components/TripPlannerSection';
 import { VehicleHero } from './components/VehicleHero';
 import { normalizeVehicleImageUrl, SEED_VEHICLE_STATE } from './data/seedData';
 import firebaseConfig from '../firebase-applet-config.json';
@@ -85,6 +87,7 @@ import {
 } from './utils/notifications';
 import { apiFetch, ServerUnavailableError } from './utils/serverApi';
 import { mergeSheetsPayloadIntoState } from './utils/sheetsMerge';
+import type { TripPlanEstimate } from './utils/tripPlanner';
 
 const STORAGE_KEY = 'ouanpee_triton_dashboard_v3';
 
@@ -160,6 +163,12 @@ export default function App() {
   const [ocrModalOpen, setOcrModalOpen] = useState(false);
   const [syncModalOpen, setSyncModalOpen] = useState(false);
   const [driveModalOpen, setDriveModalOpen] = useState(false);
+  const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
+  const [aiDrawerMode, setAiDrawerMode] = useState<'chat' | 'voice'>('chat');
+  const [activeTripEstimate, setActiveTripEstimate] = useState<TripPlanEstimate | null>(null);
+  const [pendingTripPrompt, setPendingTripPrompt] = useState<{ id: number; text: string } | null>(
+    null
+  );
   const [confirmReset, setConfirmReset] = useState(false);
   const [notificationPrefs, setNotificationPrefs] = useState<NotificationPreferences>(
     () => loadNotificationPreferences()
@@ -1245,6 +1254,16 @@ export default function App() {
     }));
   }
 
+  function handleAskAiAboutTrip(estimate: TripPlanEstimate) {
+    setActiveTripEstimate(estimate);
+    setAiDrawerMode('chat');
+    setPendingTripPrompt({
+      id: Date.now(),
+      text: `ช่วยวิเคราะห์ทริป "${estimate.routeLabel}" ระยะทางรวม ${estimate.totalDistanceKm.toLocaleString('th-TH')} กม. (ใช้น้ำมันประมาณ ${estimate.bufferedLitersNeeded.toFixed(1)} ลิตร, ค่าน้ำมันประมาณ ${estimate.estimatedFuelCostBaht.toLocaleString('th-TH')} บาท) ให้หน่อยครับว่าน้ำมันในถังตอนนี้ต้องแวะเติมช่วงไหน และต้องเช็กอะไหล่อะไรเป็นพิเศษก่อนเดินทางไหม?`,
+    });
+    setAiDrawerOpen(true);
+  }
+
   return (
     <div id="top" className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
       <StatusBanner banner={fleetBanner} onViewSchedule={handleJumpToSchedule} />
@@ -1255,6 +1274,10 @@ export default function App() {
         onOpenAddFuel={() => {
           setOcrPrefill(null);
           setFuelModalOpen(true);
+        }}
+        onOpenAiAssistant={() => {
+          setAiDrawerMode('chat');
+          setAiDrawerOpen(true);
         }}
         alerts={maintenanceAlerts}
         unacknowledgedCount={unacknowledgedAlerts.length}
@@ -1362,6 +1385,17 @@ export default function App() {
                   onRecalculateAllFuelLogs={handleRecalculateAllFuelLogs}
                 />
 
+                <TripPlannerSection
+                  currentOdometer={state.vehicle.currentOdometer}
+                  fuelPercent={state.vehicle.fuelPercent}
+                  tankCapacityLiters={state.vehicle.tankCapacityLiters}
+                  fuelStats={fuelStats}
+                  schedules={schedules}
+                  alertThresholdKm={notificationPrefs.thresholdKm}
+                  onTripEstimateChange={setActiveTripEstimate}
+                  onAskAiAboutTrip={handleAskAiAboutTrip}
+                />
+
                 <ServiceHistoryTable
                   services={state.services}
                   onEditService={(srv) => {
@@ -1375,6 +1409,19 @@ export default function App() {
                   }}
                 />
               </>
+            )}
+
+            {activeTab === 'trip' && (
+              <TripPlannerSection
+                currentOdometer={state.vehicle.currentOdometer}
+                fuelPercent={state.vehicle.fuelPercent}
+                tankCapacityLiters={state.vehicle.tankCapacityLiters}
+                fuelStats={fuelStats}
+                schedules={schedules}
+                alertThresholdKm={notificationPrefs.thresholdKm}
+                onTripEstimateChange={setActiveTripEstimate}
+                onAskAiAboutTrip={handleAskAiAboutTrip}
+              />
             )}
 
             {activeTab === 'fuel' && (
@@ -1540,6 +1587,17 @@ export default function App() {
         currentState={state}
         onClose={() => setDriveModalOpen(false)}
         onApplyPatch={handleApplyDrivePatch}
+      />
+
+      <AiAssistantDrawer
+        isOpen={aiDrawerOpen}
+        initialMode={aiDrawerMode}
+        pendingTripPrompt={pendingTripPrompt}
+        vehicle={state.vehicle}
+        fuelStats={fuelStats}
+        schedules={schedules}
+        activeTrip={activeTripEstimate}
+        onClose={() => setAiDrawerOpen(false)}
       />
 
       {!loading && (

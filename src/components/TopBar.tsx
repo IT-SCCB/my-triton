@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Plus,
   Send,
+  Sparkles,
 } from 'lucide-react';
 import type { MaintenanceAlertItem } from '../types/maintenance';
 import { ALERT_THRESHOLD_OPTIONS, formatKm } from '../utils/maintenance';
@@ -16,12 +17,13 @@ import {
   type BrowserPermissionState,
 } from '../utils/notifications';
 
-export type ActiveTab = 'overview' | 'fuel' | 'maintenance' | 'odometer';
+export type ActiveTab = 'overview' | 'trip' | 'fuel' | 'maintenance' | 'odometer';
 
 interface TopBarProps {
   activeTab: ActiveTab;
   onSelectTab: (tab: ActiveTab) => void;
   onOpenAddFuel: () => void;
+  onOpenAiAssistant: () => void;
   alerts: MaintenanceAlertItem[];
   unacknowledgedCount: number;
   dismissedAlertIds: string[];
@@ -39,6 +41,7 @@ interface TopBarProps {
 
 const NAV_ITEMS: Array<{ id: ActiveTab; label: string }> = [
   { id: 'overview', label: 'ภาพรวมทั้งหมด' },
+  { id: 'trip', label: 'คำนวณทริป' },
   { id: 'fuel', label: 'ประวัติเติมน้ำมัน' },
   { id: 'maintenance', label: 'ตารางซ่อมบำรุง' },
   { id: 'odometer', label: 'บันทึกเลขไมล์' },
@@ -48,6 +51,7 @@ export function TopBar({
   activeTab,
   onSelectTab,
   onOpenAddFuel,
+  onOpenAiAssistant,
   alerts,
   unacknowledgedCount,
   dismissedAlertIds,
@@ -129,6 +133,17 @@ export function TopBar({
         </nav>
 
         <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={onOpenAiAssistant}
+            data-testid="open-ai-assistant-btn"
+            aria-label="เปิดผู้ช่วย AI และสนทนาเสียงสด"
+            className="inline-flex items-center justify-center gap-1.5 min-w-[40px] min-h-[40px] px-2.5 sm:px-3 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-900 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+          >
+            <Sparkles className="w-4 h-4 text-blue-700 shrink-0" aria-hidden="true" />
+            <span className="hidden sm:inline">ผู้ช่วย AI</span>
+          </button>
+
           <div ref={panelContainerRef} className="relative">
             <button
               type="button"
