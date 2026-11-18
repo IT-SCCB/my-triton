@@ -1627,6 +1627,18 @@ export default function App() {
         fuelStats={fuelStats}
         schedules={schedules}
         activeTrip={activeTripEstimate}
+        recentServices={[...state.services]
+          .sort((a, b) =>
+            b.date !== a.date ? b.date.localeCompare(a.date) : b.odometer - a.odometer
+          )
+          .slice(0, 6)
+          .map((s) => ({
+            date: s.date,
+            title: s.title,
+            odometer: s.odometer,
+            totalCost: s.totalCost,
+            notes: s.notes,
+          }))}
         onClose={() => setAiDrawerOpen(false)}
       />
 

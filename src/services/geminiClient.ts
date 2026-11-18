@@ -20,7 +20,7 @@ export function hasGeminiKey(): boolean {
   return Boolean(GEMINI_API_KEY && GEMINI_API_KEY.trim().length > 0);
 }
 
-function getGeminiClient(): GoogleGenAI | null {
+export function getGeminiClient(): GoogleGenAI | null {
   if (!hasGeminiKey()) return null;
   return new GoogleGenAI({
     apiKey: GEMINI_API_KEY as string,

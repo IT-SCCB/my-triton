@@ -21,6 +21,14 @@ import type {
 } from '../types/maintenance';
 import type { TripPlanEstimate } from '../utils/tripPlanner';
 import { STATIC_MODE } from '../utils/serverApi';
+import {
+  buildAssistantSystemInstructionForClient,
+  connectDirectLiveSession,
+  streamAssistantReply,
+  type AssistantChatContext,
+  type AssistantRecentService,
+  type DirectLiveSession,
+} from '../services/geminiAssistantClient';
 
 export interface AssistantVehicleContext {
   avgKml: number;
@@ -59,6 +67,7 @@ interface AiAssistantDrawerProps {
   fuelStats: FuelAnalyticsSummary;
   schedules: MaintenanceScheduleItem[];
   activeTrip: TripPlanEstimate | null;
+  recentServices?: AssistantRecentService[];
   onClose: () => void;
 }
 
@@ -128,6 +137,7 @@ export function AiAssistantDrawer({
   fuelStats,
   schedules,
   activeTrip,
+  recentServices = [],
   onClose,
 }: AiAssistantDrawerProps) {
   const [mode, setMode] = useState<'chat' | 'voice'>(initialMode);
@@ -156,6 +166,7 @@ export function AiAssistantDrawer({
   const handledTripPromptIdRef = useRef<number | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
+  const liveSessionRef = useRef<DirectLiveSession | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const inputAudioCtxRef = useRef<AudioContext | null>(null);
   const outputAudioCtxRef = useRef<AudioContext | null>(null);
@@ -187,6 +198,26 @@ export function AiAssistantDrawer({
     };
   }, [fuelStats, vehicle, schedules, activeTrip]);
 
+  // ข้อมูลรถสำหรับ system instruction ฝั่ง client (โหมด GitHub Pages)
+  const buildClientChatContext = useCallback((): AssistantChatContext => {
+    const vc = buildVehicleContext();
+    return {
+      vehicleMake: vehicle.make,
+      vehicleModel: vehicle.model,
+      vehicleYear: vehicle.year,
+      engineSpec: vehicle.engineSpec,
+      lastUpdatedDate: vehicle.lastUpdatedDate,
+      avgKml: vc.avgKml,
+      lastPricePerLiter: vc.lastPricePerLiter,
+      currentOdometer: vc.currentOdometer,
+      fuelPercent: vc.fuelPercent,
+      tankCapacityLiters: vc.tankCapacityLiters,
+      schedulesSummary: vc.schedulesSummary,
+      activeTrip: vc.activeTrip,
+      recentServices,
+    };
+  }, [vehicle, buildVehicleContext, recentServices]);
+
   const stopPlaybackQueue = useCallback(() => {
     for (const src of activePlaybackSourcesRef.current) {
       try {
@@ -208,6 +239,15 @@ export function AiAssistantDrawer({
   const stopVoiceSession = useCallback(() => {
     liveReadyRef.current = false;
     stopPlaybackQueue();
+
+    if (liveSessionRef.current) {
+      try {
+        liveSessionRef.current.close();
+      } catch {
+        // Ignore close errors
+      }
+      liveSessionRef.current = null;
+    }
 
     if (processorRef.current) {
       processorRef.current.onaudioprocess = null;
@@ -299,10 +339,6 @@ export function AiAssistantDrawer({
     async (rawText: string) => {
       const trimmed = rawText.trim();
       if (!trimmed || chatStreaming) return;
-      if (STATIC_MODE) {
-        setChatError('โหมดเว็บสแตติก (GitHub Pages) ไม่รองรับการเรียก Gemini Server API');
-        return;
-      }
 
       setChatError(null);
       const userMsg: ChatMessage = {
@@ -323,56 +359,76 @@ export function AiAssistantDrawer({
       setChatStreaming(true);
 
       try {
-        const res = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            messages: historyPayload,
-            modelMode,
-            vehicleContext: buildVehicleContext(),
-          }),
-        });
-
-        if (!res.ok) {
-          const errJson = (await res.json().catch(() => ({}))) as { error?: string };
-          throw new Error(errJson.error || `เกิดข้อผิดพลาด (${res.status})`);
-        }
-
-        const reader = res.body?.getReader();
-        if (!reader) {
-          throw new Error('ไม่สามารถอ่านสตรีมข้อมูลจากเซิร์ฟเวอร์ได้');
-        }
-
-        const decoder = new TextDecoder();
-        let buffer = '';
         let accumulated = '';
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
+        if (STATIC_MODE) {
+          // GitHub Pages ไม่มีเซิร์ฟเวอร์ — คุยกับ Gemini ตรงจากเบราว์เซอร์
+          await streamAssistantReply({
+            history: historyPayload,
+            latestText: trimmed,
+            modelMode,
+            systemInstruction: buildAssistantSystemInstructionForClient(
+              buildClientChatContext(),
+              false
+            ),
+            onDelta: (delta) => {
+              accumulated += delta;
+              setMessages((prev) =>
+                prev.map((m) => (m.id === assistantId ? { ...m, text: accumulated } : m))
+              );
+            },
+          });
+        } else {
+          const res = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              messages: historyPayload,
+              modelMode,
+              vehicleContext: buildVehicleContext(),
+            }),
+          });
 
-          const events = buffer.split('\n\n');
-          buffer = events.pop() ?? '';
+          if (!res.ok) {
+            const errJson = (await res.json().catch(() => ({}))) as { error?: string };
+            throw new Error(errJson.error || `เกิดข้อผิดพลาด (${res.status})`);
+          }
 
-          for (const evt of events) {
-            for (const line of evt.split('\n')) {
-              if (!line.startsWith('data:')) continue;
-              const jsonStr = line.slice(5).trim();
-              if (!jsonStr) continue;
-              const payload = JSON.parse(jsonStr) as {
-                text?: string;
-                done?: boolean;
-                error?: string;
-              };
-              if (payload.error) {
-                throw new Error(payload.error);
-              }
-              if (payload.text) {
-                accumulated += payload.text;
-                setMessages((prev) =>
-                  prev.map((m) => (m.id === assistantId ? { ...m, text: accumulated } : m))
-                );
+          const reader = res.body?.getReader();
+          if (!reader) {
+            throw new Error('ไม่สามารถอ่านสตรีมข้อมูลจากเซิร์ฟเวอร์ได้');
+          }
+
+          const decoder = new TextDecoder();
+          let buffer = '';
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+
+            const events = buffer.split('\n\n');
+            buffer = events.pop() ?? '';
+
+            for (const evt of events) {
+              for (const line of evt.split('\n')) {
+                if (!line.startsWith('data:')) continue;
+                const jsonStr = line.slice(5).trim();
+                if (!jsonStr) continue;
+                const payload = JSON.parse(jsonStr) as {
+                  text?: string;
+                  done?: boolean;
+                  error?: string;
+                };
+                if (payload.error) {
+                  throw new Error(payload.error);
+                }
+                if (payload.text) {
+                  accumulated += payload.text;
+                  setMessages((prev) =>
+                    prev.map((m) => (m.id === assistantId ? { ...m, text: accumulated } : m))
+                  );
+                }
               }
             }
           }
@@ -392,7 +448,7 @@ export function AiAssistantDrawer({
         setChatStreaming(false);
       }
     },
-    [chatStreaming, messages, modelMode, buildVehicleContext]
+    [chatStreaming, messages, modelMode, buildVehicleContext, buildClientChatContext]
   );
 
   useEffect(() => {
@@ -465,11 +521,6 @@ export function AiAssistantDrawer({
 
   async function startVoiceSession() {
     if (voiceStatus === 'connecting' || voiceStatus === 'live') return;
-    if (STATIC_MODE) {
-      setVoiceError('โหมดเว็บสแตติก (GitHub Pages) ไม่รองรับการสนทนาเสียงสดผ่านเซิร์ฟเวอร์');
-      setVoiceStatus('error');
-      return;
-    }
 
     setVoiceError(null);
     setVoiceStatus('connecting');
@@ -494,10 +545,6 @@ export function AiAssistantDrawer({
       outputAudioCtxRef.current = outputCtx;
       nextStartTimeRef.current = outputCtx.currentTime;
 
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const ws = new WebSocket(`${protocol}//${window.location.host}/api/live`);
-      wsRef.current = ws;
-
       const source = inputCtx.createMediaStreamSource(stream);
       const processor = inputCtx.createScriptProcessor(4096, 1, 1);
       sourceNodeRef.current = source;
@@ -506,20 +553,67 @@ export function AiAssistantDrawer({
       source.connect(processor);
       processor.connect(inputCtx.destination);
 
+      // ส่งเสียงไมค์ไปตามช่องทางที่ใช้งานอยู่ (เซสชัน Live ตรง / WebSocket เซิร์ฟเวอร์)
+      const sendVoiceAudio = (base64Audio: string) => {
+        if (liveSessionRef.current) {
+          liveSessionRef.current.sendRealtimeInput({
+            audio: { data: base64Audio, mimeType: 'audio/pcm;rate=16000' },
+          });
+          return;
+        }
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({ type: 'audio', data: base64Audio }));
+        }
+      };
+
       processor.onaudioprocess = (event) => {
-        if (
-          !liveReadyRef.current ||
-          isMutedRef.current ||
-          !wsRef.current ||
-          wsRef.current.readyState !== WebSocket.OPEN
-        ) {
+        if (!liveReadyRef.current || isMutedRef.current) {
           return;
         }
         const channelData = event.inputBuffer.getChannelData(0);
         const pcm16k = downsampleTo16k(channelData, inputCtx.sampleRate);
         const base64Audio = float32ToBase64Pcm16(pcm16k);
-        wsRef.current.send(JSON.stringify({ type: 'audio', data: base64Audio }));
+        sendVoiceAudio(base64Audio);
       };
+
+      if (STATIC_MODE) {
+        // GitHub Pages ไม่มีเซิร์ฟเวอร์ — ต่อ Gemini Live ตรงจากเบราว์เซอร์
+        const session = await connectDirectLiveSession({
+          systemInstruction: buildAssistantSystemInstructionForClient(
+            buildClientChatContext(),
+            true
+          ),
+          callbacks: {
+            onOpen: () => {
+              liveReadyRef.current = true;
+              setVoiceStatus('live');
+            },
+            onAudio: (data) => play24kPcmChunk(data),
+            onInputTranscript: (text) => appendTranscript('user', text),
+            onOutputTranscript: (text) => appendTranscript('model', text),
+            onInterrupted: () => stopPlaybackQueue(),
+            onError: (msg) => {
+              setVoiceError(msg);
+              stopVoiceSession();
+              setVoiceStatus('error');
+            },
+            onClose: () => {
+              if (liveReadyRef.current) {
+                stopVoiceSession();
+              }
+            },
+          },
+        });
+        liveSessionRef.current = session;
+        // connect จะ resolve ต่อเมื่อเซสชันพร้อมแล้ว — กันกรณี onOpen เกิดก่อน
+        liveReadyRef.current = true;
+        setVoiceStatus('live');
+        return;
+      }
+
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const ws = new WebSocket(`${protocol}//${window.location.host}/api/live`);
+      wsRef.current = ws;
 
       ws.onopen = () => {
         ws.send(
@@ -605,7 +699,14 @@ export function AiAssistantDrawer({
   function handleVoiceTextSubmit(e: FormEvent) {
     e.preventDefault();
     const trimmed = voiceTextInput.trim();
-    if (!trimmed || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    if (!trimmed) return;
+    if (liveSessionRef.current) {
+      liveSessionRef.current.sendRealtimeInput({ text: trimmed });
+      appendTranscript('user', trimmed);
+      setVoiceTextInput('');
+      return;
+    }
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
     wsRef.current.send(JSON.stringify({ type: 'text', text: trimmed }));
     appendTranscript('user', trimmed);
     setVoiceTextInput('');
