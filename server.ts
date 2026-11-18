@@ -45,6 +45,98 @@ function getGeminiClient(): GoogleGenAI | null {
   });
 }
 
+const GMP_SOLUTION_ID = 'gmp_mcp_codeassist_v1_aistudio';
+
+function getMapsApiKey(): string {
+  const key = (
+    process.env.GOOGLE_MAPS_API_KEY ??
+    process.env.VITE_GOOGLE_MAPS_API_KEY ??
+    ''
+  ).trim();
+  if (!key || key === 'MY_GOOGLE_MAPS_API_KEY') return '';
+  return key;
+}
+
+interface RawPlaceResult {
+  id?: string;
+  displayName?: { text?: string; languageCode?: string };
+  formattedAddress?: string;
+  shortFormattedAddress?: string;
+  location?: { latitude?: number; longitude?: number };
+  googleMapsUri?: string;
+  googleMapsLinks?: { directionsUri?: string; placeUri?: string };
+  currentOpeningHours?: { openNow?: boolean };
+  rating?: number;
+  userRatingCount?: number;
+}
+
+interface RawRoutingSummary {
+  legs?: Array<{
+    duration?: string;
+    distanceMeters?: number;
+  }>;
+  directionsUri?: string;
+}
+
+function parseDurationSeconds(raw?: string): number | null {
+  if (!raw) return null;
+  const match = raw.match(/^(\d+(?:\.\d+)?)s$/);
+  return match ? Math.round(Number(match[1])) : null;
+}
+
+function isQuotaExceededError(status: number, payload: unknown): boolean {
+  if (status === 429) return true;
+  if (payload && typeof payload === 'object') {
+    const err = (payload as { error?: { status?: string; message?: string } }).error;
+    if (
+      err?.status === 'RESOURCE_EXHAUSTED' ||
+      err?.status === 'OVER_QUERY_LIMIT' ||
+      (typeof err?.message === 'string' &&
+        (err.message.includes('RESOURCE_EXHAUSTED') ||
+          err.message.toLowerCase().includes('quota')))
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function mapPlaceToStation(
+  place: RawPlaceResult,
+  routingSummary?: RawRoutingSummary
+) {
+  const lat = place.location?.latitude;
+  const lng = place.location?.longitude;
+  if (typeof lat !== 'number' || typeof lng !== 'number') return null;
+
+  const firstLeg = routingSummary?.legs?.[0];
+  return {
+    id: place.id ?? `${lat.toFixed(5)},${lng.toFixed(5)}`,
+    name: place.displayName?.text ?? 'สถานีบริการน้ำมัน',
+    address: place.shortFormattedAddress ?? place.formattedAddress ?? '',
+    location: { lat, lng },
+    rating: typeof place.rating === 'number' ? place.rating : null,
+    userRatingCount:
+      typeof place.userRatingCount === 'number' ? place.userRatingCount : null,
+    openNow:
+      typeof place.currentOpeningHours?.openNow === 'boolean'
+        ? place.currentOpeningHours.openNow
+        : null,
+    googleMapsUri:
+      place.googleMapsUri ?? place.googleMapsLinks?.placeUri ?? null,
+    directionsUri:
+      routingSummary?.directionsUri ??
+      place.googleMapsLinks?.directionsUri ??
+      place.googleMapsUri ??
+      null,
+    routingDistanceMeters:
+      typeof firstLeg?.distanceMeters === 'number'
+        ? firstLeg.distanceMeters
+        : null,
+    routingDurationSeconds: parseDurationSeconds(firstLeg?.duration),
+  };
+}
+
 async function readState(): Promise<VehicleMaintenanceState> {
   try {
     const raw = await fs.readFile(DATA_FILE, 'utf-8');
@@ -857,6 +949,287 @@ async function startServer() {
         res.write(`data: ${JSON.stringify({ error: `ผู้ช่วย AI ตอบไม่สำเร็จ: ${msg}` })}\n\n`);
         res.end();
       }
+    }
+  });
+
+  app.get('/api/maps/config', (_req, res) => {
+    const apiKey = getMapsApiKey();
+    res.json({
+      configured: Boolean(apiKey),
+      apiKey,
+    });
+  });
+
+  app.post('/api/maps/route-stations', async (req, res) => {
+    try {
+      const apiKey = getMapsApiKey();
+      if (!apiKey) {
+        res.status(503).json({
+          error: 'ยังไม่ได้ตั้งค่า Google Maps API Key ในระบบเซิร์ฟเวอร์',
+        });
+        return;
+      }
+
+      const { origin, destinationQuery, destinationCoords } = req.body as {
+        origin?: { lat?: number; lng?: number };
+        destinationQuery?: string;
+        destinationCoords?: { lat?: number; lng?: number };
+      };
+
+      if (
+        !origin ||
+        typeof origin.lat !== 'number' ||
+        typeof origin.lng !== 'number' ||
+        !Number.isFinite(origin.lat) ||
+        !Number.isFinite(origin.lng)
+      ) {
+        res.status(400).json({ error: 'พิกัดตำแหน่งปัจจุบันไม่ถูกต้อง' });
+        return;
+      }
+
+      const trimmedDest = destinationQuery?.trim() ?? '';
+      const hasDestCoords =
+        destinationCoords &&
+        typeof destinationCoords.lat === 'number' &&
+        typeof destinationCoords.lng === 'number' &&
+        Number.isFinite(destinationCoords.lat) &&
+        Number.isFinite(destinationCoords.lng);
+
+      let computedRoute: {
+        distanceMeters: number;
+        durationSeconds: number;
+        encodedPolyline: string;
+        startLocation: { lat: number; lng: number } | null;
+        endLocation: { lat: number; lng: number } | null;
+      } | null = null;
+      let routeNotice: string | null = null;
+
+      if (hasDestCoords || trimmedDest) {
+        const destinationPayload = hasDestCoords
+          ? {
+              location: {
+                latLng: {
+                  latitude: destinationCoords!.lat,
+                  longitude: destinationCoords!.lng,
+                },
+              },
+            }
+          : { address: trimmedDest };
+
+        const routesRes = await fetch(
+          'https://routes.googleapis.com/directions/v2:computeRoutes',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Goog-Api-Key': apiKey,
+              'X-Goog-FieldMask':
+                'routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,routes.legs.startLocation,routes.legs.endLocation',
+              'X-Goog-Maps-Solution-ID': GMP_SOLUTION_ID,
+            },
+            body: JSON.stringify({
+              origin: {
+                location: {
+                  latLng: {
+                    latitude: origin.lat,
+                    longitude: origin.lng,
+                  },
+                },
+              },
+              destination: destinationPayload,
+              travelMode: 'DRIVE',
+              routingPreference: 'TRAFFIC_AWARE',
+              languageCode: 'th',
+              units: 'METRIC',
+            }),
+          }
+        );
+
+        const routesJson = (await routesRes.json().catch(() => ({}))) as {
+          routes?: Array<{
+            distanceMeters?: number;
+            duration?: string;
+            polyline?: { encodedPolyline?: string };
+            legs?: Array<{
+              startLocation?: { latLng?: { latitude?: number; longitude?: number } };
+              endLocation?: { latLng?: { latitude?: number; longitude?: number } };
+            }>;
+          }>;
+          error?: { status?: string; message?: string };
+        };
+
+        if (!routesRes.ok) {
+          if (isQuotaExceededError(routesRes.status, routesJson)) {
+            res.status(429).json({
+              error: 'โควตา Google Maps Platform เต็มชั่วคราว',
+              quotaExceeded: true,
+            });
+            return;
+          }
+          routeNotice =
+            routesJson.error?.message ??
+            'ไม่สามารถคำนวณเส้นทางไปยังปลายทางนี้ได้ กำลังค้นหาปั๊มใกล้เคียงแทน';
+        } else {
+          const primary = routesJson.routes?.[0];
+          const encodedPolyline = primary?.polyline?.encodedPolyline ?? '';
+          if (primary && encodedPolyline) {
+            const firstLeg = primary.legs?.[0];
+            const lastLeg = primary.legs?.[primary.legs.length - 1];
+            const startLatLng = firstLeg?.startLocation?.latLng;
+            const endLatLng = lastLeg?.endLocation?.latLng;
+            computedRoute = {
+              distanceMeters: primary.distanceMeters ?? 0,
+              durationSeconds: parseDurationSeconds(primary.duration) ?? 0,
+              encodedPolyline,
+              startLocation:
+                typeof startLatLng?.latitude === 'number' &&
+                typeof startLatLng?.longitude === 'number'
+                  ? { lat: startLatLng.latitude, lng: startLatLng.longitude }
+                  : origin as { lat: number; lng: number },
+              endLocation:
+                typeof endLatLng?.latitude === 'number' &&
+                typeof endLatLng?.longitude === 'number'
+                  ? { lat: endLatLng.latitude, lng: endLatLng.longitude }
+                  : null,
+            };
+          } else {
+            routeNotice = 'ไม่พบเส้นทางรถยนต์ไปยังปลายทางที่ระบุ กำลังแสดงปั๊มน้ำมันใกล้ตำแหน่งของคุณ';
+          }
+        }
+      }
+
+      const placeFieldMask = [
+        'places.id',
+        'places.displayName',
+        'places.shortFormattedAddress',
+        'places.formattedAddress',
+        'places.location',
+        'places.googleMapsUri',
+        'places.googleMapsLinks',
+        'places.currentOpeningHours',
+        'places.rating',
+        'places.userRatingCount',
+      ].join(',');
+
+      let alongRouteStations: ReturnType<typeof mapPlaceToStation>[] = [];
+      if (computedRoute?.encodedPolyline && computedRoute.distanceMeters >= 500) {
+        const searchRouteRes = await fetch(
+          'https://places.googleapis.com/v1/places:searchText',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Goog-Api-Key': apiKey,
+              'X-Goog-FieldMask': `${placeFieldMask},routingSummaries`,
+              'X-Goog-Maps-Solution-ID': GMP_SOLUTION_ID,
+            },
+            body: JSON.stringify({
+              textQuery: 'ปั๊มน้ำมัน',
+              includedType: 'gas_station',
+              maxResultCount: 16,
+              languageCode: 'th',
+              regionCode: 'TH',
+              searchAlongRouteParameters: {
+                polyline: {
+                  encodedPolyline: computedRoute.encodedPolyline,
+                },
+              },
+              routingParameters: {
+                origin: {
+                  latitude: origin.lat,
+                  longitude: origin.lng,
+                },
+                travelMode: 'DRIVE',
+              },
+            }),
+          }
+        );
+
+        const searchRouteJson = (await searchRouteRes.json().catch(() => ({}))) as {
+          places?: RawPlaceResult[];
+          routingSummaries?: RawRoutingSummary[];
+          error?: { status?: string; message?: string };
+        };
+
+        if (!searchRouteRes.ok && isQuotaExceededError(searchRouteRes.status, searchRouteJson)) {
+          res.status(429).json({
+            error: 'โควตา Google Maps Platform เต็มชั่วคราว',
+            quotaExceeded: true,
+          });
+          return;
+        }
+
+        if (searchRouteRes.ok && Array.isArray(searchRouteJson.places)) {
+          const summaries = Array.isArray(searchRouteJson.routingSummaries)
+            ? searchRouteJson.routingSummaries
+            : [];
+          alongRouteStations = searchRouteJson.places
+            .map((p, idx) => mapPlaceToStation(p, summaries[idx]))
+            .filter(Boolean);
+        }
+      }
+
+      const nearbyRes = await fetch(
+        'https://places.googleapis.com/v1/places:searchNearby',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Goog-Api-Key': apiKey,
+            'X-Goog-FieldMask': placeFieldMask,
+            'X-Goog-Maps-Solution-ID': GMP_SOLUTION_ID,
+          },
+          body: JSON.stringify({
+            includedTypes: ['gas_station'],
+            maxResultCount: 10,
+            rankPreference: 'DISTANCE',
+            languageCode: 'th',
+            regionCode: 'TH',
+            locationRestriction: {
+              circle: {
+                center: {
+                  latitude: origin.lat,
+                  longitude: origin.lng,
+                },
+                radius: 15000,
+              },
+            },
+          }),
+        }
+      );
+
+      const nearbyJson = (await nearbyRes.json().catch(() => ({}))) as {
+        places?: RawPlaceResult[];
+        error?: { status?: string; message?: string };
+      };
+
+      if (!nearbyRes.ok && isQuotaExceededError(nearbyRes.status, nearbyJson)) {
+        res.status(429).json({
+          error: 'โควตา Google Maps Platform เต็มชั่วคราว',
+          quotaExceeded: true,
+        });
+        return;
+      }
+
+      const nearbyStations =
+        nearbyRes.ok && Array.isArray(nearbyJson.places)
+          ? nearbyJson.places.map((p) => mapPlaceToStation(p)).filter(Boolean)
+          : [];
+
+      res.json({
+        origin: { lat: origin.lat, lng: origin.lng },
+        route: computedRoute,
+        alongRouteStations,
+        nearbyStations,
+        routeNotice,
+      });
+    } catch (error) {
+      const msg =
+        error instanceof Error
+          ? error.message
+          : 'เกิดข้อผิดพลาดในการค้นหาปั๊มน้ำมันและเส้นทาง';
+      console.error('Google Maps proxy error:', error);
+      res.status(500).json({ error: msg });
     }
   });
 

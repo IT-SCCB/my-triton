@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Activity, AlertTriangle, Gauge, PieChart, TrendingUp } from 'lucide-react';
+import { Activity, AlertTriangle, Calendar, Gauge, PieChart, TrendingUp } from 'lucide-react';
 import {
   Area,
   AreaChart,
@@ -16,6 +16,7 @@ import type {
   CostSummary,
   FuelLogEntry,
   MonthlyMaintenanceTrendPoint,
+  MonthlyOdometerPoint,
   OdometerLogEntry,
   OdometerTrendPoint,
   ServiceRecord,
@@ -23,6 +24,7 @@ import type {
 import {
   computeFuelKmlFromFormula,
   computeMaintenanceCostTrend,
+  computeMonthlyOdometerSummary,
   computeOdometerTrend,
   formatBaht,
   formatKm,
@@ -341,6 +343,135 @@ function CustomOdometerTooltip({ active, payload }: OdometerTooltipProps) {
   );
 }
 
+interface MonthlyOdometerTooltipProps {
+  active?: boolean;
+  payload?: Array<{
+    payload: MonthlyOdometerPoint;
+  }>;
+  metric: 'reading' | 'distance';
+}
+
+function CustomMonthlyOdometerTooltip({
+  active,
+  payload,
+  metric,
+}: MonthlyOdometerTooltipProps) {
+  if (!active || !payload || payload.length === 0) return null;
+  const item = payload[0].payload;
+
+  return (
+    <div className="bg-slate-900 text-white rounded-lg px-3.5 py-2.5 shadow-lg border border-slate-800 text-xs space-y-1.5 min-w-[235px]">
+      <div className="flex items-center justify-between gap-4 border-b border-slate-700 pb-1">
+        <span className="font-semibold text-white">{item.monthLabel}</span>
+        <span className="font-mono text-slate-300 tabular-nums">
+          บันทึก {item.readingsCount} ครั้ง
+        </span>
+      </div>
+
+      <div className="flex items-center justify-between gap-4">
+        <span className="text-slate-300">เลขไมล์ปลายเดือน</span>
+        <span
+          className={`font-mono font-bold tabular-nums ${
+            metric === 'reading' ? 'text-teal-300' : 'text-slate-100'
+          }`}
+        >
+          {formatKm(item.endOdometer)} กม.
+        </span>
+      </div>
+
+      <div className="flex items-center justify-between gap-4">
+        <span className="text-slate-300">เลขไมล์ต้นเดือน</span>
+        <span className="font-mono text-slate-200 tabular-nums">
+          {formatKm(item.startOdometer)} กม.
+        </span>
+      </div>
+
+      <div className="flex items-center justify-between gap-4">
+        <span className="text-slate-300">ระยะทางวิ่งเดือนนี้</span>
+        <span
+          className={`font-mono font-bold tabular-nums ${
+            item.isPeakMonth
+              ? 'text-amber-300'
+              : metric === 'distance'
+                ? 'text-teal-300'
+                : 'text-emerald-300'
+          }`}
+        >
+          +{formatKm(item.distanceKm)} กม.
+        </span>
+      </div>
+
+      {item.momDistanceDelta !== null && (
+        <div className="flex items-center justify-between gap-4 border-t border-slate-700 pt-1">
+          <span className="text-slate-300">เทียบระยะเดือนก่อน</span>
+          <span
+            className={`font-mono font-semibold tabular-nums ${
+              item.momDistanceDelta > 0
+                ? 'text-amber-300'
+                : item.momDistanceDelta < 0
+                  ? 'text-emerald-300'
+                  : 'text-slate-300'
+            }`}
+          >
+            {item.momDistanceDelta > 0 ? '+' : ''}
+            {formatKm(item.momDistanceDelta)} กม.
+          </span>
+        </div>
+      )}
+
+      {item.isPeakMonth && (
+        <p className="text-[11px] font-medium text-amber-300">
+          เดือนที่ใช้งานรถระยะทางสูงสุดในช่วงนี้
+        </p>
+      )}
+    </div>
+  );
+}
+
+interface CustomMonthlyOdoDotProps {
+  cx?: number;
+  cy?: number;
+  index?: number;
+  payload?: MonthlyOdometerPoint;
+}
+
+function CustomMonthlyOdoDot({
+  cx,
+  cy,
+  index,
+  payload,
+}: CustomMonthlyOdoDotProps) {
+  if (typeof cx !== 'number' || typeof cy !== 'number' || !payload) {
+    return <g key={`monthly-odo-empty-${index ?? 0}`} />;
+  }
+
+  if (payload.isPeakMonth) {
+    return (
+      <circle
+        key={`monthly-odo-dot-${payload.monthKey}`}
+        cx={cx}
+        cy={cy}
+        r={5.5}
+        fill="#d97706"
+        stroke="#ffffff"
+        strokeWidth={2}
+      />
+    );
+  }
+
+  return (
+    <circle
+      key={`monthly-odo-dot-${payload.monthKey}`}
+      cx={cx}
+      cy={cy}
+      r={4}
+      fill="#ffffff"
+      stroke="#0f766e"
+      strokeWidth={2.5}
+    />
+  );
+}
+
 export function AnalyticsSection({
   fuelLogs,
   costSummary,
@@ -353,6 +484,8 @@ export function AnalyticsSection({
   const [selectedLogId, setSelectedLogId] = useState<string | null>(null);
   const [trendRange, setTrendRange] = useState<'12m' | '6m'>('12m');
   const [odometerRange, setOdometerRange] = useState<'all' | '90d' | '30d'>('all');
+  const [monthlyOdoMetric, setMonthlyOdoMetric] = useState<'reading' | 'distance'>('reading');
+  const [monthlyOdoWindow, setMonthlyOdoWindow] = useState<'all' | '12m' | '6m'>('all');
 
   const chronologicalAll = sortFuelLogsChronological(fuelLogs);
   const outlierLogs = chronologicalAll.filter((l) => {
@@ -410,6 +543,31 @@ export function AnalyticsSection({
   const odoPad = Math.max(100, Math.round(odoSpan * 0.15));
   const odoYMin = Math.max(0, Math.floor((odometerTrend.minOdometer - odoPad) / 100) * 100);
   const odoYMax = Math.ceil((odometerTrend.maxOdometer + odoPad) / 100) * 100;
+
+  const allMonthlyOdometer = computeMonthlyOdometerSummary(odometerLogs, null);
+  const monthlyOdometer =
+    monthlyOdoWindow === 'all'
+      ? allMonthlyOdometer
+      : computeMonthlyOdometerSummary(
+          odometerLogs,
+          monthlyOdoWindow === '12m' ? 12 : 6
+        );
+  const monthlyOdoSpan = Math.max(
+    200,
+    monthlyOdometer.maxOdometer - monthlyOdometer.minOdometer
+  );
+  const monthlyOdoPad = Math.max(100, Math.round(monthlyOdoSpan * 0.18));
+  const monthlyOdoYMin = Math.max(
+    0,
+    Math.floor((monthlyOdometer.minOdometer - monthlyOdoPad) / 100) * 100
+  );
+  const monthlyOdoYMax =
+    Math.ceil((monthlyOdometer.maxOdometer + monthlyOdoPad) / 100) * 100;
+  const maxMonthlyDist = Math.max(
+    100,
+    ...monthlyOdometer.points.map((p) => p.distanceKm)
+  );
+  const monthlyDistYMax = Math.ceil((maxMonthlyDist * 1.15) / 100) * 100;
 
   // SVG Donut math
   const radius = 56;
@@ -966,6 +1124,227 @@ export function AnalyticsSection({
               <span className="font-mono tabular-nums">
                 ข้อมูล {odometerTrend.points.length} จุดเวลา (ล่าสุด{' '}
                 {formatKm(odometerTrend.latestOdometer)} กม.)
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Monthly Odometer Readings & Driving Habits (Recharts LineChart) */}
+      <div
+        data-testid="monthly-odometer-chart"
+        className="bg-white border border-slate-200 rounded-xl p-5 sm:p-6 space-y-4"
+      >
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div>
+            <h2 className="font-display text-base sm:text-lg font-semibold text-slate-900 flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-teal-700 shrink-0" aria-hidden="true" />
+              <span>กราฟเลขไมล์สะสมรายเดือนและพฤติกรรมการขับขี่</span>
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+              {monthlyOdometer.monthCount > 0 ? (
+                <>
+                  ติดตามรายเดือน {monthlyOdometer.monthCount} เดือน · เฉลี่ยวิ่ง{' '}
+                  <strong className="font-mono tabular-nums text-teal-700">
+                    ~{formatKm(monthlyOdometer.averageMonthlyDistanceKm)} กม./เดือน
+                  </strong>
+                  {monthlyOdometer.peakDistanceMonth && (
+                    <>
+                      {' '}
+                      · เดือนขับสูงสุด{' '}
+                      <strong className="font-mono tabular-nums text-amber-700">
+                        {monthlyOdometer.peakDistanceMonth.monthLabel} (+
+                        {formatKm(monthlyOdometer.peakDistanceMonth.distanceKm)} กม.)
+                      </strong>
+                    </>
+                  )}
+                </>
+              ) : (
+                'สรุปเลขไมล์ปลายเดือนและระยะทางขับขี่ในแต่ละเดือนเพื่อวิเคราะห์พฤติกรรมการใช้รถ'
+              )}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 self-start lg:self-auto">
+            <div
+              role="group"
+              aria-label="รูปแบบข้อมูลกราฟเลขไมล์รายเดือน"
+              className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-lg"
+            >
+              <button
+                type="button"
+                onClick={() => setMonthlyOdoMetric('reading')}
+                aria-pressed={monthlyOdoMetric === 'reading'}
+                className={`px-3 py-1.5 min-h-[34px] rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                  monthlyOdoMetric === 'reading'
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                เลขไมล์รายเดือน
+              </button>
+              <button
+                type="button"
+                onClick={() => setMonthlyOdoMetric('distance')}
+                aria-pressed={monthlyOdoMetric === 'distance'}
+                className={`px-3 py-1.5 min-h-[34px] rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                  monthlyOdoMetric === 'distance'
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                ระยะทางต่อเดือน
+              </button>
+            </div>
+
+            {allMonthlyOdometer.monthCount > 6 && (
+              <div
+                role="group"
+                aria-label="จำนวนเดือนที่แสดงในกราฟเลขไมล์รายเดือน"
+                className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-lg"
+              >
+                <button
+                  type="button"
+                  onClick={() => setMonthlyOdoWindow('6m')}
+                  aria-pressed={monthlyOdoWindow === '6m'}
+                  className={`px-2.5 py-1.5 min-h-[34px] rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                    monthlyOdoWindow === '6m'
+                      ? 'bg-white text-slate-900 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  6 เดือน
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMonthlyOdoWindow('12m')}
+                  aria-pressed={monthlyOdoWindow === '12m'}
+                  className={`px-2.5 py-1.5 min-h-[34px] rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                    monthlyOdoWindow === '12m'
+                      ? 'bg-white text-slate-900 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  12 เดือน
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMonthlyOdoWindow('all')}
+                  aria-pressed={monthlyOdoWindow === 'all'}
+                  className={`px-2.5 py-1.5 min-h-[34px] rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                    monthlyOdoWindow === 'all'
+                      ? 'bg-white text-slate-900 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  ทั้งหมด
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {monthlyOdometer.points.length === 0 ? (
+          <div className="h-56 flex items-center justify-center border border-dashed border-slate-200 rounded-lg text-sm text-slate-500">
+            ยังไม่มีประวัติเลขไมล์รายเดือนสำหรับแสดงกราฟ
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="w-full h-64 sm:h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart
+                  data={monthlyOdometer.points}
+                  margin={{ top: 18, right: 24, left: 8, bottom: 4 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis
+                    dataKey="shortLabel"
+                    tick={{ fill: '#475569', fontSize: 11 }}
+                    axisLine={{ stroke: '#cbd5e1' }}
+                    tickLine={false}
+                    interval={monthlyOdometer.points.length <= 12 ? 0 : 'preserveStartEnd'}
+                  />
+                  <YAxis
+                    domain={
+                      monthlyOdoMetric === 'reading'
+                        ? [monthlyOdoYMin, monthlyOdoYMax]
+                        : [0, monthlyDistYMax]
+                    }
+                    tickFormatter={(val: number) => formatKm(val)}
+                    tick={{ fill: '#64748b', fontSize: 11 }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={64}
+                  />
+                  <Tooltip
+                    content={<CustomMonthlyOdometerTooltip metric={monthlyOdoMetric} />}
+                    cursor={{ stroke: '#94a3b8', strokeDasharray: '3 3' }}
+                  />
+                  {monthlyOdoMetric === 'distance' &&
+                    monthlyOdometer.averageMonthlyDistanceKm > 0 && (
+                      <ReferenceLine
+                        y={monthlyOdometer.averageMonthlyDistanceKm}
+                        stroke="#64748b"
+                        strokeDasharray="4 4"
+                        label={{
+                          value: `เฉลี่ย ${formatKm(monthlyOdometer.averageMonthlyDistanceKm)} กม.`,
+                          position: 'insideTopRight',
+                          fill: '#475569',
+                          fontSize: 11,
+                        }}
+                      />
+                    )}
+                  <Line
+                    type="monotone"
+                    dataKey={monthlyOdoMetric === 'reading' ? 'endOdometer' : 'distanceKm'}
+                    name={
+                      monthlyOdoMetric === 'reading'
+                        ? 'เลขไมล์ปลายเดือน (กม.)'
+                        : 'ระยะทางขับขี่รายเดือน (กม.)'
+                    }
+                    stroke="#0f766e"
+                    strokeWidth={2.5}
+                    animationDuration={200}
+                    dot={<CustomMonthlyOdoDot />}
+                    activeDot={{
+                      r: 6,
+                      fill: '#0f766e',
+                      stroke: '#ffffff',
+                      strokeWidth: 2,
+                    }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs text-slate-500">
+              <div className="flex flex-wrap items-center gap-4">
+                <span className="inline-flex items-center gap-1.5">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full bg-teal-700 shrink-0"
+                    aria-hidden="true"
+                  />
+                  <span>
+                    {monthlyOdoMetric === 'reading'
+                      ? 'เลขไมล์สะสมปลายเดือน'
+                      : 'ระยะทางขับขี่ในแต่ละเดือน'}
+                  </span>
+                </span>
+                {monthlyOdometer.peakDistanceMonth && (
+                  <span className="inline-flex items-center gap-1.5">
+                    <span
+                      className="w-2.5 h-2.5 rounded-full bg-amber-600 shrink-0"
+                      aria-hidden="true"
+                    />
+                    <span>
+                      เดือนที่ใช้งานสูงสุด ({monthlyOdometer.peakDistanceMonth.shortLabel})
+                    </span>
+                  </span>
+                )}
+              </div>
+              <span className="font-mono tabular-nums text-slate-500">
+                ระยะทางรวมในช่วง +{formatKm(monthlyOdometer.totalTrackedKm)} กม. · ล่าสุด{' '}
+                {formatKm(monthlyOdometer.latestOdometer)} กม.
               </span>
             </div>
           </div>

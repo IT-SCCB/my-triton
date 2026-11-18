@@ -217,6 +217,22 @@ export interface OdometerAnalyticsSummary {
   latestOdometer: number;
 }
 
+export interface MonthlyOdometerPoint extends OdometerMonthlyMileagePoint {
+  momDistanceDelta: number | null;
+  isPeakMonth: boolean;
+}
+
+export interface MonthlyOdometerSummary {
+  points: MonthlyOdometerPoint[];
+  monthCount: number;
+  totalTrackedKm: number;
+  averageMonthlyDistanceKm: number;
+  peakDistanceMonth: MonthlyOdometerPoint | null;
+  minOdometer: number;
+  maxOdometer: number;
+  latestOdometer: number;
+}
+
 export interface VehicleMaintenanceState {
   vehicle: VehicleProfile;
   services: ServiceRecord[];

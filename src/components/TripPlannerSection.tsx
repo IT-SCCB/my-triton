@@ -2,28 +2,54 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   ArrowLeftRight,
+  BarChart3,
   CheckCircle2,
+  Compass,
   Fuel,
   Gauge,
   MapPin,
+  Navigation,
   RotateCcw,
   Route,
   Sparkles,
   Wrench,
 } from 'lucide-react';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import type {
   FuelAnalyticsSummary,
+  FuelLogEntry,
   MaintenanceScheduleItem,
+  OdometerLogEntry,
 } from '../types/maintenance';
 import { formatBaht, formatKm } from '../utils/maintenance';
+import { apiFetch } from '../utils/serverApi';
 import {
   calculateTripEstimate,
+  computeAnnualFuelCostForecast,
   DRIVING_CONDITION_CONFIG,
   evaluateTripMaintenanceImpacts,
+  extractDestinationFromRouteName,
   TRIP_PRESET_ROUTES,
   type DrivingCondition,
+  type FuelPriceTrendMode,
+  type LatLngPoint,
+  type MonthlyFuelForecastPoint,
   type TripPlanEstimate,
 } from '../utils/tripPlanner';
+import {
+  TripStationsMapPanel,
+  type RouteStationsApiResponse,
+} from './TripStationsMapPanel';
 
 interface TripPlannerSectionProps {
   currentOdometer: number;
@@ -32,8 +58,61 @@ interface TripPlannerSectionProps {
   fuelStats: FuelAnalyticsSummary;
   schedules: MaintenanceScheduleItem[];
   alertThresholdKm: number;
+  odometerLogs?: OdometerLogEntry[];
+  fuelLogs?: FuelLogEntry[];
   onTripEstimateChange?: (estimate: TripPlanEstimate) => void;
   onAskAiAboutTrip?: (estimate: TripPlanEstimate) => void;
+}
+
+interface AnnualForecastTooltipProps {
+  active?: boolean;
+  payload?: Array<{
+    payload: MonthlyFuelForecastPoint;
+  }>;
+}
+
+function CustomAnnualFuelTooltip({ active, payload }: AnnualForecastTooltipProps) {
+  if (!active || !payload || payload.length === 0) return null;
+  const item = payload[0].payload;
+
+  return (
+    <div className="bg-slate-900 text-white rounded-lg px-3.5 py-2.5 shadow-lg border border-slate-800 text-xs space-y-1.5 min-w-[235px]">
+      <div className="flex items-center justify-between gap-4 border-b border-slate-700 pb-1">
+        <span className="font-semibold text-white">{item.monthLabel}</span>
+        <span className="font-mono text-slate-300 tabular-nums">
+          เดือนที่ {item.monthIndex}/12
+        </span>
+      </div>
+
+      <div className="flex items-center justify-between gap-4">
+        <span className="text-slate-300">ค่าน้ำมันประมาณการ</span>
+        <span className="font-mono font-bold text-emerald-300 tabular-nums">
+          {formatBaht(item.estimatedCostBaht)} บาท
+        </span>
+      </div>
+
+      <div className="flex items-center justify-between gap-4">
+        <span className="text-slate-300">ระยะทางเฉลี่ย/เดือน</span>
+        <span className="font-mono text-slate-100 tabular-nums">
+          ~{formatKm(item.projectedKm)} กม. ({item.projectedLiters.toFixed(1)} ล.)
+        </span>
+      </div>
+
+      <div className="flex items-center justify-between gap-4">
+        <span className="text-slate-300">ราคาน้ำมันคาดการณ์</span>
+        <span className="font-mono text-amber-300 tabular-nums">
+          {item.projectedPricePerLiter.toFixed(2)} บ./ลิตร
+        </span>
+      </div>
+
+      <div className="flex items-center justify-between gap-4 border-t border-slate-700 pt-1">
+        <span className="text-slate-300">งบสะสมถึงเดือนนี้</span>
+        <span className="font-mono font-semibold text-white tabular-nums">
+          {formatBaht(item.cumulativeCostBaht)} บาท
+        </span>
+      </div>
+    </div>
+  );
 }
 
 const BUFFER_OPTIONS = [0, 10, 15, 20] as const;
@@ -45,6 +124,8 @@ export function TripPlannerSection({
   fuelStats,
   schedules,
   alertThresholdKm,
+  odometerLogs = [],
+  fuelLogs = [],
   onTripEstimateChange,
   onAskAiAboutTrip,
 }: TripPlannerSectionProps) {
@@ -53,6 +134,10 @@ export function TripPlannerSection({
 
   const [selectedPresetId, setSelectedPresetId] = useState<string>(TRIP_PRESET_ROUTES[0].id);
   const [routeName, setRouteName] = useState<string>(TRIP_PRESET_ROUTES[0].label);
+  const [destinationQuery, setDestinationQuery] = useState<string>(
+    TRIP_PRESET_ROUTES[0].destinationQuery
+  );
+  const [destinationDirty, setDestinationDirty] = useState<boolean>(false);
   const [oneWayKmInput, setOneWayKmInput] = useState<string>(String(TRIP_PRESET_ROUTES[0].oneWayKm));
   const [roundTrip, setRoundTrip] = useState<boolean>(true);
   const [drivingCondition, setDrivingCondition] = useState<DrivingCondition>('mixed');
@@ -62,6 +147,19 @@ export function TripPlannerSection({
   const [priceDirty, setPriceDirty] = useState<boolean>(false);
   const [bufferPercent, setBufferPercent] = useState<number>(10);
   const [extraCostInput, setExtraCostInput] = useState<string>('0');
+
+  const [mapsApiKey, setMapsApiKey] = useState<string>(() =>
+    ((import.meta as { env?: Record<string, string | undefined> }).env?.VITE_GOOGLE_MAPS_API_KEY ??
+      '').trim()
+  );
+  const [stationsPanelOpen, setStationsPanelOpen] = useState<boolean>(false);
+  const [stationsLoading, setStationsLoading] = useState<boolean>(false);
+  const [stationsError, setStationsError] = useState<string | null>(null);
+  const [geolocationDenied, setGeolocationDenied] = useState<boolean>(false);
+  const [stationsData, setStationsData] = useState<RouteStationsApiResponse | null>(null);
+  const [locationLabel, setLocationLabel] = useState<string>('ตำแหน่ง GPS ปัจจุบัน');
+  const [isFallbackLocation, setIsFallbackLocation] = useState<boolean>(false);
+  const [forecastTrendMode, setForecastTrendMode] = useState<FuelPriceTrendMode>('auto');
 
   useEffect(() => {
     if (!kmlDirty && fuelStats.avgKml > 0) {
@@ -119,6 +217,34 @@ export function TripPlannerSection({
     [schedules, estimate.totalDistanceKm, alertThresholdKm]
   );
 
+  const annualForecast = useMemo(
+    () =>
+      computeAnnualFuelCostForecast({
+        odometerLogs,
+        fuelLogs,
+        baseKml: parsedBaseKml,
+        currentFuelPricePerLiter: parsedPrice > 0 ? parsedPrice : defaultPrice,
+        trendMode: forecastTrendMode,
+      }),
+    [odometerLogs, fuelLogs, parsedBaseKml, parsedPrice, defaultPrice, forecastTrendMode]
+  );
+
+  const peakForecastCost = Math.max(
+    0,
+    ...annualForecast.points.map((p) => p.estimatedCostBaht)
+  );
+  const minForecastCost = Math.min(
+    ...annualForecast.points.map((p) => p.estimatedCostBaht)
+  );
+  const forecastYMin =
+    minForecastCost > 500
+      ? Math.max(0, Math.floor((minForecastCost * 0.7) / 100) * 100)
+      : 0;
+  const forecastYMax = Math.max(
+    500,
+    Math.ceil((peakForecastCost * 1.15) / 100) * 100
+  );
+
   const tankCoverageRatio =
     estimate.totalDistanceKm > 0
       ? Math.min(100, Math.round((estimate.estimatedCurrentRangeKm / estimate.totalDistanceKm) * 100))
@@ -129,7 +255,146 @@ export function TripPlannerSection({
     if (!preset) return;
     setSelectedPresetId(preset.id);
     setRouteName(preset.label);
+    setDestinationQuery(preset.destinationQuery);
+    setDestinationDirty(false);
     setOneWayKmInput(String(preset.oneWayKm));
+  }
+
+  async function ensureMapsApiKey(): Promise<string> {
+    if (mapsApiKey) return mapsApiKey;
+    try {
+      const cfgRes = await apiFetch('/api/maps/config');
+      if (cfgRes.ok) {
+        const cfg = (await cfgRes.json()) as { apiKey?: string };
+        const key = (cfg.apiKey ?? '').trim();
+        if (key) {
+          setMapsApiKey(key);
+          return key;
+        }
+      }
+    } catch {
+      // Ignore config fetch failure and let route fetch report clear error
+    }
+    return '';
+  }
+
+  async function fetchStationsForOrigin(
+    origin: LatLngPoint,
+    label: string,
+    fallbackFlag: boolean
+  ) {
+    setStationsPanelOpen(true);
+    setStationsLoading(true);
+    setStationsError(null);
+    setGeolocationDenied(false);
+    setLocationLabel(label);
+    setIsFallbackLocation(fallbackFlag);
+
+    try {
+      await ensureMapsApiKey();
+
+      const resolvedDestination =
+        destinationQuery.trim() || extractDestinationFromRouteName(routeName);
+
+      const res = await apiFetch('/api/maps/route-stations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          origin,
+          destinationQuery: resolvedDestination || undefined,
+        }),
+      });
+
+      const payload = (await res.json().catch(() => ({}))) as RouteStationsApiResponse & {
+        error?: string | { status?: string; message?: string };
+        quotaExceeded?: boolean;
+      };
+
+      const errStatus =
+        typeof payload.error === 'object' ? payload.error?.status : undefined;
+      if (
+        res.status === 429 ||
+        payload.quotaExceeded ||
+        errStatus === 'RESOURCE_EXHAUSTED' ||
+        errStatus === 'OVER_QUERY_LIMIT'
+      ) {
+        window.dispatchEvent(new CustomEvent('gmp-quota-exceeded'));
+        setStationsError(
+          'โควตาการใช้งาน Google Maps Platform เต็มชั่วคราว กรุณาลองใหม่ภายหลัง'
+        );
+        return;
+      }
+
+      if (!res.ok) {
+        const errMsg =
+          typeof payload.error === 'string'
+            ? payload.error
+            : payload.error?.message ?? 'ไม่สามารถค้นหาปั๊มน้ำมันตามเส้นทางได้';
+        setStationsError(errMsg);
+        return;
+      }
+
+      setStationsData(payload);
+    } catch (err) {
+      setStationsError(
+        err instanceof Error
+          ? err.message
+          : 'เกิดข้อผิดพลาดในการเชื่อมต่อ Google Maps Platform'
+      );
+    } finally {
+      setStationsLoading(false);
+    }
+  }
+
+  function handleFindNearbyStations() {
+    setStationsPanelOpen(true);
+    setStationsError(null);
+    setGeolocationDenied(false);
+
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      setGeolocationDenied(true);
+      setStationsError(
+        'เบราว์เซอร์นี้ไม่รองรับ Geolocation API กรุณาใช้ปุ่มค้นหาจากจุดเริ่มต้นกรุงเทพฯ ด้านล่างแทน'
+      );
+      return;
+    }
+
+    setStationsLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const coords: LatLngPoint = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        };
+        void fetchStationsForOrigin(coords, 'ตำแหน่ง GPS ปัจจุบันของคุณ', false);
+      },
+      (geoErr) => {
+        setStationsLoading(false);
+        setGeolocationDenied(true);
+        if (geoErr.code === geoErr.PERMISSION_DENIED) {
+          setStationsError(
+            'ไม่ได้รับอนุญาตให้เข้าถึงตำแหน่ง GPS กรุณาเปิดสิทธิ์ Location ของเบราว์เซอร์ หรือค้นหาเส้นทางจากจุดเริ่มต้นกรุงเทพฯ'
+          );
+        } else {
+          setStationsError(
+            'ไม่สามารถระบุพิกัด GPS ปัจจุบันได้ในขณะนี้ สามารถลองใหม่หรือค้นหาจากจุดเริ่มต้นกรุงเทพฯ แทนได้'
+          );
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 60000,
+      }
+    );
+  }
+
+  function handleSearchFromBangkokFallback() {
+    void fetchStationsForOrigin(
+      { lat: 13.7563, lng: 100.5018 },
+      'กรุงเทพมหานคร',
+      true
+    );
   }
 
   return (
@@ -155,17 +420,30 @@ export function TripPlannerSection({
           </p>
         </div>
 
-        {onAskAiAboutTrip && (
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
           <button
             type="button"
-            onClick={() => onAskAiAboutTrip(estimate)}
-            data-testid="trip-ask-ai-btn"
-            className="inline-flex items-center justify-center gap-1.5 min-h-[40px] px-4 py-2 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-900 text-sm font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer self-start sm:self-auto"
+            onClick={handleFindNearbyStations}
+            disabled={stationsLoading}
+            data-testid="find-nearby-stations-btn"
+            className="inline-flex items-center justify-center gap-1.5 min-h-[40px] px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 disabled:opacity-60 text-white text-sm font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer"
           >
-            <Sparkles className="w-4 h-4 text-blue-700 shrink-0" aria-hidden="true" />
-            <span>ปรึกษา AI เรื่องทริปนี้</span>
+            <Navigation className="w-4 h-4 text-emerald-400 shrink-0" aria-hidden="true" />
+            <span>ค้นหาปั๊มน้ำมันใกล้เคียง</span>
           </button>
-        )}
+
+          {onAskAiAboutTrip && (
+            <button
+              type="button"
+              onClick={() => onAskAiAboutTrip(estimate)}
+              data-testid="trip-ask-ai-btn"
+              className="inline-flex items-center justify-center gap-1.5 min-h-[40px] px-4 py-2 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-900 text-sm font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            >
+              <Sparkles className="w-4 h-4 text-blue-700 shrink-0" aria-hidden="true" />
+              <span>ปรึกษา AI เรื่องทริปนี้</span>
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
@@ -202,24 +480,51 @@ export function TripPlannerSection({
           {/* Left: Inputs */}
           <div className="lg:col-span-6 p-5 sm:p-6 space-y-5">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="sm:col-span-2">
-                <label
-                  htmlFor="trip-route-name"
-                  className="block text-xs font-medium text-slate-700 mb-1.5"
-                >
-                  ชื่อทริป / เส้นทาง
-                </label>
-                <input
-                  id="trip-route-name"
-                  type="text"
-                  value={routeName}
-                  onChange={(e) => {
-                    setRouteName(e.target.value);
-                    setSelectedPresetId('');
-                  }}
-                  placeholder="เช่น กรุงเทพฯ – เชียงใหม่"
-                  className="w-full min-h-[40px] px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
-                />
+              <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label
+                    htmlFor="trip-route-name"
+                    className="block text-xs font-medium text-slate-700 mb-1.5"
+                  >
+                    ชื่อทริป / เส้นทาง
+                  </label>
+                  <input
+                    id="trip-route-name"
+                    type="text"
+                    value={routeName}
+                    onChange={(e) => {
+                      const nextName = e.target.value;
+                      setRouteName(nextName);
+                      setSelectedPresetId('');
+                      if (!destinationDirty) {
+                        setDestinationQuery(extractDestinationFromRouteName(nextName));
+                      }
+                    }}
+                    placeholder="เช่น กรุงเทพฯ – เชียงใหม่"
+                    className="w-full min-h-[40px] px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="trip-destination-query"
+                    className="block text-xs font-medium text-slate-700 mb-1.5"
+                  >
+                    ปลายทางสำหรับค้นหาปั๊มตามเส้นทาง
+                  </label>
+                  <input
+                    id="trip-destination-query"
+                    type="text"
+                    value={destinationQuery}
+                    onChange={(e) => {
+                      setDestinationDirty(true);
+                      setDestinationQuery(e.target.value);
+                    }}
+                    placeholder="เช่น พัทยา ชลบุรี หรือ อำเภอเมืองเชียงใหม่"
+                    data-testid="trip-destination-input"
+                    className="w-full min-h-[40px] px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  />
+                </div>
               </div>
 
               <div>
@@ -577,6 +882,20 @@ export function TripPlannerSection({
                   </span>
                 </div>
               )}
+
+              <button
+                type="button"
+                onClick={handleFindNearbyStations}
+                disabled={stationsLoading}
+                className="w-full inline-flex items-center justify-center gap-2 min-h-[38px] px-3.5 py-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 disabled:opacity-60 text-slate-800 text-xs font-medium transition-colors cursor-pointer"
+              >
+                <Navigation className="w-3.5 h-3.5 text-blue-700 shrink-0" aria-hidden="true" />
+                <span>
+                  {estimate.canCompleteWithCurrentFuel
+                    ? 'ดูปั๊มน้ำมันใกล้เคียงและตลอดเส้นทางบนแผนที่'
+                    : 'ค้นหาจุดแวะเติมน้ำมันตามเส้นทางจากตำแหน่ง GPS'}
+                </span>
+              </button>
             </div>
 
             {/* Maintenance Milestone Impact */}
@@ -622,6 +941,197 @@ export function TripPlannerSection({
               )}
             </div>
           </div>
+        </div>
+
+        {stationsPanelOpen && (
+          <>
+            {geolocationDenied && stationsError && (
+              <div className="border-t border-slate-200 bg-amber-50/70 px-5 py-3 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-xs text-amber-900">
+                  <Compass className="w-4 h-4 text-amber-700 shrink-0" aria-hidden="true" />
+                  <span>ต้องการดูตัวอย่างเส้นทางและจุดแวะเติมน้ำมันในแผนที่?</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSearchFromBangkokFallback}
+                  data-testid="fallback-bangkok-search-btn"
+                  className="px-3.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-medium cursor-pointer"
+                >
+                  ใช้จุดเริ่มต้นกรุงเทพฯ ค้นหาปั๊มตามเส้นทาง
+                </button>
+              </div>
+            )}
+
+            <TripStationsMapPanel
+              mapsApiKey={mapsApiKey}
+              loading={stationsLoading}
+              error={stationsError}
+              locationLabel={locationLabel}
+              isFallbackLocation={isFallbackLocation}
+              data={stationsData}
+              estimate={estimate}
+              tankCapacityLiters={tankCapacityLiters}
+              fuelPercent={fuelPercent}
+              onApplyRouteDistanceKm={(km) => {
+                setOneWayKmInput(String(km));
+                setSelectedPresetId('');
+              }}
+              onRetrySearch={handleFindNearbyStations}
+            />
+          </>
+        )}
+      </div>
+
+      {/* 12-Month Fuel Cost Projection BarChart */}
+      <div
+        data-testid="annual-fuel-forecast-chart"
+        className="bg-white border border-slate-200 rounded-xl p-5 sm:p-6 space-y-4"
+      >
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div>
+            <h3 className="font-display text-base sm:text-lg font-semibold text-slate-900 flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 text-emerald-700 shrink-0" aria-hidden="true" />
+              <span>คาดการณ์ค่าน้ำมันล่วงหน้า 12 เดือน</span>
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+              อิงระยะทางเฉลี่ย{' '}
+              <strong className="font-mono tabular-nums text-slate-800">
+                ~{formatKm(annualForecast.historicalMonthlyKm)} กม./เดือน
+              </strong>{' '}
+              ({annualForecast.effectiveKml.toFixed(2)} กม./ล.) · งบรวม 12 เดือน{' '}
+              <strong className="font-mono tabular-nums text-emerald-700">
+                ~{formatBaht(annualForecast.totalAnnualCostBaht)} บาท
+              </strong>{' '}
+              (เฉลี่ย {formatBaht(annualForecast.averageMonthlyCostBaht)} บ./เดือน)
+            </p>
+          </div>
+
+          <div
+            role="group"
+            aria-label="สมมติฐานแนวโน้มราคาน้ำมัน 12 เดือน"
+            className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-lg self-start lg:self-auto"
+          >
+            <button
+              type="button"
+              onClick={() => setForecastTrendMode('auto')}
+              aria-pressed={forecastTrendMode === 'auto'}
+              data-testid="forecast-mode-auto"
+              className={`px-3 py-1.5 min-h-[34px] rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                forecastTrendMode === 'auto'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              ตามแนวโน้มราคาจริง
+            </button>
+            <button
+              type="button"
+              onClick={() => setForecastTrendMode('steady')}
+              aria-pressed={forecastTrendMode === 'steady'}
+              data-testid="forecast-mode-steady"
+              className={`px-3 py-1.5 min-h-[34px] rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                forecastTrendMode === 'steady'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              ราคาคงที่
+            </button>
+            <button
+              type="button"
+              onClick={() => setForecastTrendMode('rising')}
+              aria-pressed={forecastTrendMode === 'rising'}
+              data-testid="forecast-mode-rising"
+              className={`px-3 py-1.5 min-h-[34px] rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                forecastTrendMode === 'rising'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              เผื่อราคาขึ้น
+            </button>
+          </div>
+        </div>
+
+        <div className="w-full h-64 sm:h-72">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              data={annualForecast.points}
+              margin={{ top: 18, right: 20, left: 6, bottom: 4 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+              <XAxis
+                dataKey="shortLabel"
+                tick={{ fill: '#475569', fontSize: 11 }}
+                axisLine={{ stroke: '#cbd5e1' }}
+                tickLine={false}
+                interval={0}
+              />
+              <YAxis
+                domain={[forecastYMin, forecastYMax]}
+                tickFormatter={(val: number) => formatBaht(val)}
+                tick={{ fill: '#64748b', fontSize: 11 }}
+                axisLine={false}
+                tickLine={false}
+                width={56}
+              />
+              <Tooltip
+                content={<CustomAnnualFuelTooltip />}
+                cursor={{ fill: 'rgba(148, 163, 184, 0.12)' }}
+              />
+              {annualForecast.averageMonthlyCostBaht > 0 && (
+                <ReferenceLine
+                  y={annualForecast.averageMonthlyCostBaht}
+                  stroke="#64748b"
+                  strokeDasharray="4 4"
+                  label={{
+                    value: `เฉลี่ย ${formatBaht(annualForecast.averageMonthlyCostBaht)} บ.`,
+                    position: 'insideTopRight',
+                    fill: '#475569',
+                    fontSize: 11,
+                  }}
+                />
+              )}
+              <Bar
+                dataKey="estimatedCostBaht"
+                name="ค่าน้ำมันประมาณการ (บาท)"
+                radius={[4, 4, 0, 0]}
+                maxBarSize={36}
+                animationDuration={200}
+              >
+                {annualForecast.points.map((entry) => {
+                  const isPeak =
+                    annualForecast.priceTrendDirection !== 'steady' &&
+                    entry.estimatedCostBaht === peakForecastCost;
+                  const fillColor = isPeak
+                    ? annualForecast.priceTrendDirection === 'up'
+                      ? '#d97706'
+                      : '#0284c7'
+                    : annualForecast.priceTrendDirection === 'up'
+                      ? '#0f766e'
+                      : '#059669';
+                  return <Cell key={entry.monthKey} fill={fillColor} />;
+                })}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs text-slate-500">
+          <span className="font-mono tabular-nums">
+            แนวโน้มราคาน้ำมัน:{' '}
+            {annualForecast.priceTrendDirection === 'up'
+              ? `ปรับขึ้น (+${annualForecast.appliedMonthlyPriceDelta.toFixed(2)} บ./ล./เดือน)`
+              : annualForecast.priceTrendDirection === 'down'
+                ? `ปรับลง (${annualForecast.appliedMonthlyPriceDelta.toFixed(2)} บ./ล./เดือน)`
+                : 'ทรงตัว (0.00 บ./ล./เดือน)'}{' '}
+            · {annualForecast.baselinePricePerLiter.toFixed(2)} →{' '}
+            {annualForecast.endPricePerLiter.toFixed(2)} บ./ลิตร
+          </span>
+          <span className="font-mono tabular-nums">
+            รวมระยะทาง 12 เดือน ~{formatKm(annualForecast.totalAnnualKm)} กม. (~
+            {annualForecast.totalAnnualLiters.toFixed(0)} ลิตร)
+          </span>
         </div>
       </div>
     </section>

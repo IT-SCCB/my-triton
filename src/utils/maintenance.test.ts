@@ -513,3 +513,40 @@ test('reconcileFuelLogsWithOdometer preserves recorded kmPerLiter/kml even under
   });
   assert.equal(skippedCheck.mismatchedCount, 0);
 });
+
+test('computeMonthlyOdometerSummary aggregates monthly readings, peak driving month, MoM delta, and window slicing', async () => {
+  const { computeMonthlyOdometerSummary } = await import('./maintenance');
+
+  const seedSummary = computeMonthlyOdometerSummary(SEED_VEHICLE_STATE.odometerLogs);
+  assert.equal(seedSummary.monthCount, 3);
+  assert.equal(seedSummary.points[0].monthKey, '2026-09');
+  assert.equal(seedSummary.points[0].endOdometer, 231895);
+  assert.equal(seedSummary.points[0].readingsCount, 2);
+  assert.equal(seedSummary.points[1].monthKey, '2026-10');
+  assert.equal(seedSummary.points[1].endOdometer, 233589);
+  assert.equal(seedSummary.points[1].distanceKm, 1694);
+  assert.equal(seedSummary.points[2].monthKey, '2026-11');
+  assert.equal(seedSummary.points[2].endOdometer, 233850);
+  assert.equal(seedSummary.points[2].distanceKm, 261);
+  assert.equal(seedSummary.points[2].readingsCount, 3);
+  assert.equal(seedSummary.points[2].momDistanceDelta, 261 - 1694);
+  assert.equal(seedSummary.peakDistanceMonth?.monthKey, '2026-10');
+  assert.equal(seedSummary.points[1].isPeakMonth, true);
+  assert.equal(seedSummary.totalTrackedKm, 1955);
+  assert.equal(seedSummary.averageMonthlyDistanceKm, 978);
+  assert.equal(seedSummary.latestOdometer, 233850);
+
+  // Window slicing retains accurate startOdometer from prior month
+  const sliced = computeMonthlyOdometerSummary(SEED_VEHICLE_STATE.odometerLogs, 2);
+  assert.equal(sliced.monthCount, 2);
+  assert.equal(sliced.points[0].monthKey, '2026-10');
+  assert.equal(sliced.points[0].startOdometer, 231895);
+  assert.equal(sliced.points[0].distanceKm, 1694);
+
+  // Empty logs return clean zeroed summary
+  const empty = computeMonthlyOdometerSummary([]);
+  assert.equal(empty.monthCount, 0);
+  assert.equal(empty.points.length, 0);
+  assert.equal(empty.peakDistanceMonth, null);
+  assert.equal(empty.averageMonthlyDistanceKm, 0);
+});

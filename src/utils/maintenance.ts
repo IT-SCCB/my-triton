@@ -8,6 +8,8 @@ import type {
   MaintenanceTrendSummary,
   MonthlyCostComparisonPoint,
   MonthlyMaintenanceTrendPoint,
+  MonthlyOdometerPoint,
+  MonthlyOdometerSummary,
   OdometerAnalyticsSummary,
   OdometerLogEntry,
   OdometerMonthlyMileagePoint,
@@ -806,7 +808,7 @@ export function computeMonthlyPartsVsLabor(
     });
 }
 
-function addMonths(monthKey: string, delta: number): string {
+export function addMonths(monthKey: string, delta: number): string {
   const match = /^(\d{4})-(\d{2})$/.exec(monthKey);
   if (!match) return monthKey;
   const totalMonths = Number(match[1]) * 12 + (Number(match[2]) - 1) + delta;
@@ -1113,6 +1115,133 @@ export function computeOdometerTrend(
     spanDays,
     averageMonthlyKm,
     averageDailyKm,
+    minOdometer,
+    maxOdometer,
+    latestOdometer,
+  };
+}
+
+export function computeMonthlyOdometerSummary(
+  odometerLogs: OdometerLogEntry[],
+  monthsLimit: number | null = null
+): MonthlyOdometerSummary {
+  const validSorted = [...odometerLogs]
+    .filter(
+      (l) =>
+        /^\d{4}-\d{2}-\d{2}$/.test(l.date.trim()) &&
+        Number.isFinite(l.odometer) &&
+        l.odometer > 0
+    )
+    .sort((a, b) =>
+      a.date !== b.date ? a.date.localeCompare(b.date) : a.odometer - b.odometer
+    );
+
+  // Deduplicate same-date readings by retaining the latest/highest odometer reading per calendar date
+  const byDate = new Map<string, OdometerLogEntry>();
+  for (const entry of validSorted) {
+    byDate.set(entry.date, entry);
+  }
+  const chronological = Array.from(byDate.values());
+
+  if (chronological.length === 0) {
+    return {
+      points: [],
+      monthCount: 0,
+      totalTrackedKm: 0,
+      averageMonthlyDistanceKm: 0,
+      peakDistanceMonth: null,
+      minOdometer: 0,
+      maxOdometer: 0,
+      latestOdometer: 0,
+    };
+  }
+
+  const monthGroups = new Map<string, OdometerLogEntry[]>();
+  for (const entry of chronological) {
+    const monthKey = entry.date.slice(0, 7);
+    const list = monthGroups.get(monthKey) ?? [];
+    list.push(entry);
+    monthGroups.set(monthKey, list);
+  }
+
+  const allMonthlyPoints: MonthlyOdometerPoint[] = [];
+  let prevMonthEnd: number | null = null;
+  let prevDistanceKm: number | null = null;
+
+  for (const [monthKey, items] of Array.from(monthGroups.entries()).sort(([a], [b]) =>
+    a.localeCompare(b)
+  )) {
+    const startOdometer =
+      prevMonthEnd !== null ? Math.min(prevMonthEnd, items[0].odometer) : items[0].odometer;
+    const endOdometer = items[items.length - 1].odometer;
+    const distanceKm = Math.max(0, endOdometer - startOdometer);
+    const momDistanceDelta =
+      prevDistanceKm !== null ? distanceKm - prevDistanceKm : null;
+
+    allMonthlyPoints.push({
+      monthKey,
+      monthLabel: formatThaiMonthYear(monthKey),
+      shortLabel: formatThaiMonthShortYear(monthKey),
+      startOdometer,
+      endOdometer,
+      distanceKm,
+      readingsCount: items.length,
+      momDistanceDelta,
+      isPeakMonth: false,
+    });
+
+    prevMonthEnd = endOdometer;
+    prevDistanceKm = distanceKm;
+  }
+
+  const sliced =
+    typeof monthsLimit === 'number' &&
+    monthsLimit > 0 &&
+    allMonthlyPoints.length > monthsLimit
+      ? allMonthlyPoints.slice(-monthsLimit)
+      : allMonthlyPoints;
+
+  let peakCandidate: MonthlyOdometerPoint | null = null;
+  for (const point of sliced) {
+    if (
+      point.distanceKm > 0 &&
+      (!peakCandidate || point.distanceKm > peakCandidate.distanceKm)
+    ) {
+      peakCandidate = point;
+    }
+  }
+
+  const points: MonthlyOdometerPoint[] = sliced.map((point) => ({
+    ...point,
+    isPeakMonth: peakCandidate !== null && point.monthKey === peakCandidate.monthKey,
+  }));
+
+  const peakDistanceMonth =
+    points.find((point) => point.isPeakMonth) ?? null;
+
+  const endValues = points.map((p) => p.endOdometer);
+  const minOdometer = Math.min(...endValues);
+  const maxOdometer = Math.max(...endValues);
+  const latestOdometer = points[points.length - 1].endOdometer;
+  const totalTrackedKm = points.reduce((sum, p) => sum + p.distanceKm, 0);
+
+  const activeDistanceMonths = points.filter(
+    (p, idx) => idx > 0 || p.distanceKm > 0
+  );
+  const averageMonthlyDistanceKm =
+    activeDistanceMonths.length > 0
+      ? Math.round(
+          activeDistanceMonths.reduce((sum, p) => sum + p.distanceKm, 0) /
+            activeDistanceMonths.length
+        )
+      : 0;
+
+  return {
+    points,
+    monthCount: points.length,
+    totalTrackedKm,
+    averageMonthlyDistanceKm,
+    peakDistanceMonth,
     minOdometer,
     maxOdometer,
     latestOdometer,
