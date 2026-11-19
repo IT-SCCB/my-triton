@@ -32,7 +32,10 @@ import type {
   OdometerLogEntry,
 } from '../types/maintenance';
 import { formatBaht, formatKm } from '../utils/maintenance';
-import { apiFetch } from '../utils/serverApi';
+import {
+  fetchRouteStationsOsm,
+  type RouteStationsApiResponse,
+} from '../utils/clientOsm';
 import {
   calculateTripEstimate,
   computeAnnualFuelCostForecast,
@@ -46,10 +49,7 @@ import {
   type MonthlyFuelForecastPoint,
   type TripPlanEstimate,
 } from '../utils/tripPlanner';
-import {
-  TripStationsMapPanel,
-  type RouteStationsApiResponse,
-} from './TripStationsMapPanel';
+import { TripStationsMapPanel } from './TripStationsMapPanel';
 
 interface TripPlannerSectionProps {
   currentOdometer: number;
@@ -148,10 +148,6 @@ export function TripPlannerSection({
   const [bufferPercent, setBufferPercent] = useState<number>(10);
   const [extraCostInput, setExtraCostInput] = useState<string>('0');
 
-  const [mapsApiKey, setMapsApiKey] = useState<string>(() =>
-    ((import.meta as { env?: Record<string, string | undefined> }).env?.VITE_GOOGLE_MAPS_API_KEY ??
-      '').trim()
-  );
   const [stationsPanelOpen, setStationsPanelOpen] = useState<boolean>(false);
   const [stationsLoading, setStationsLoading] = useState<boolean>(false);
   const [stationsError, setStationsError] = useState<string | null>(null);
@@ -260,24 +256,6 @@ export function TripPlannerSection({
     setOneWayKmInput(String(preset.oneWayKm));
   }
 
-  async function ensureMapsApiKey(): Promise<string> {
-    if (mapsApiKey) return mapsApiKey;
-    try {
-      const cfgRes = await apiFetch('/api/maps/config');
-      if (cfgRes.ok) {
-        const cfg = (await cfgRes.json()) as { apiKey?: string };
-        const key = (cfg.apiKey ?? '').trim();
-        if (key) {
-          setMapsApiKey(key);
-          return key;
-        }
-      }
-    } catch {
-      // Ignore config fetch failure and let route fetch report clear error
-    }
-    return '';
-  }
-
   async function fetchStationsForOrigin(
     origin: LatLngPoint,
     label: string,
@@ -291,55 +269,22 @@ export function TripPlannerSection({
     setIsFallbackLocation(fallbackFlag);
 
     try {
-      await ensureMapsApiKey();
-
+      // ค้นหาตรงจากเบราว์เซอร์ด้วย OpenStreetMap (Overpass + Nominatim + OSRM)
+      // ไม่ต้องใช้ API key และไม่ต้องมีเซิร์ฟเวอร์หลังบ้าน จึงใช้บน GitHub Pages ได้
       const resolvedDestination =
         destinationQuery.trim() || extractDestinationFromRouteName(routeName);
 
-      const res = await apiFetch('/api/maps/route-stations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          origin,
-          destinationQuery: resolvedDestination || undefined,
-        }),
+      const payload = await fetchRouteStationsOsm({
+        origin,
+        destinationQuery: resolvedDestination || undefined,
       });
-
-      const payload = (await res.json().catch(() => ({}))) as RouteStationsApiResponse & {
-        error?: string | { status?: string; message?: string };
-        quotaExceeded?: boolean;
-      };
-
-      const errStatus =
-        typeof payload.error === 'object' ? payload.error?.status : undefined;
-      if (
-        res.status === 429 ||
-        payload.quotaExceeded ||
-        errStatus === 'RESOURCE_EXHAUSTED' ||
-        errStatus === 'OVER_QUERY_LIMIT'
-      ) {
-        window.dispatchEvent(new CustomEvent('gmp-quota-exceeded'));
-        setStationsError(
-          'โควตาการใช้งาน Google Maps Platform เต็มชั่วคราว กรุณาลองใหม่ภายหลัง'
-        );
-        return;
-      }
-
-      if (!res.ok) {
-        const errMsg =
-          typeof payload.error === 'string'
-            ? payload.error
-            : payload.error?.message ?? 'ไม่สามารถค้นหาปั๊มน้ำมันตามเส้นทางได้';
-        setStationsError(errMsg);
-        return;
-      }
 
       setStationsData(payload);
     } catch (err) {
       setStationsError(
         err instanceof Error
           ? err.message
-          : 'เกิดข้อผิดพลาดในการเชื่อมต่อ Google Maps Platform'
+          : 'เกิดข้อผิดพลาดในการค้นหาปั๊มน้ำมัน กรุณาลองใหม่อีกครั้ง'
       );
     } finally {
       setStationsLoading(false);
@@ -963,7 +908,6 @@ export function TripPlannerSection({
             )}
 
             <TripStationsMapPanel
-              mapsApiKey={mapsApiKey}
               loading={stationsLoading}
               error={stationsError}
               locationLabel={locationLabel}

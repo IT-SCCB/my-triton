@@ -1,12 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  AdvancedMarker,
-  APIProvider,
-  InfoWindow,
-  Map as GoogleMap,
-  Pin,
-  useMap,
-} from '@vis.gl/react-google-maps';
+import { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -14,41 +6,23 @@ import {
   ExternalLink,
   Fuel,
   Loader2,
-  MapPin,
   Navigation,
   Star,
 } from 'lucide-react';
 import { formatKm } from '../utils/maintenance';
-import type {
-  EnrichedGasStation,
-  GasStationApiItem,
-  LatLngPoint,
-  TankRefuelMilestone,
-  TripPlanEstimate,
-} from '../utils/tripPlanner';
+import type { LatLngPoint, TripPlanEstimate } from '../utils/tripPlanner';
 import {
   buildRouteCumulativeDistances,
   computeTankRefuelMilestones,
   decodeEncodedPolyline,
   enrichGasStationsForTank,
 } from '../utils/tripPlanner';
+import type { RouteStationsApiResponse } from '../utils/clientOsm';
+import { OsmMapView } from './OsmMapView';
 
-export interface RouteStationsApiResponse {
-  origin: LatLngPoint;
-  route: {
-    distanceMeters: number;
-    durationSeconds: number;
-    encodedPolyline: string;
-    startLocation: LatLngPoint | null;
-    endLocation: LatLngPoint | null;
-  } | null;
-  alongRouteStations: GasStationApiItem[];
-  nearbyStations: GasStationApiItem[];
-  routeNotice: string | null;
-}
+export type { RouteStationsApiResponse };
 
 interface TripStationsMapPanelProps {
-  mapsApiKey: string;
   loading: boolean;
   error: string | null;
   locationLabel: string;
@@ -71,245 +45,7 @@ function formatDurationThai(seconds: number): string {
   return `${hours} ชม. ${mins} นาที`;
 }
 
-function RoutePolylineAndBounds({
-  origin,
-  routePoints,
-  endLocation,
-  stations,
-  focusedLocation,
-}: {
-  origin: LatLngPoint;
-  routePoints: LatLngPoint[];
-  endLocation: LatLngPoint | null;
-  stations: EnrichedGasStation[];
-  focusedLocation: LatLngPoint | null;
-}) {
-  const map = useMap();
-  const polylineRef = useRef<google.maps.Polyline | null>(null);
-
-  useEffect(() => {
-    if (!map) return;
-
-    if (polylineRef.current) {
-      polylineRef.current.setMap(null);
-      polylineRef.current = null;
-    }
-
-    if (routePoints.length >= 2) {
-      const polyline = new google.maps.Polyline({
-        path: routePoints,
-        geodesic: true,
-        strokeColor: '#1d4ed8',
-        strokeOpacity: 0.9,
-        strokeWeight: 5,
-        map,
-      });
-      polylineRef.current = polyline;
-    }
-
-    const bounds = new google.maps.LatLngBounds();
-    bounds.extend(origin);
-    if (routePoints.length >= 2) {
-      // Sample route points to keep fitBounds fast on long routes
-      const step = Math.max(1, Math.floor(routePoints.length / 60));
-      for (let i = 0; i < routePoints.length; i += step) {
-        bounds.extend(routePoints[i]);
-      }
-      bounds.extend(routePoints[routePoints.length - 1]);
-    } else {
-      stations.slice(0, 8).forEach((s) => bounds.extend(s.location));
-    }
-    if (endLocation) {
-      bounds.extend(endLocation);
-    }
-
-    map.fitBounds(bounds, { top: 44, right: 44, bottom: 44, left: 44 });
-
-    return () => {
-      if (polylineRef.current) {
-        polylineRef.current.setMap(null);
-        polylineRef.current = null;
-      }
-    };
-  }, [map, origin, routePoints, endLocation, stations]);
-
-  useEffect(() => {
-    if (!map || !focusedLocation) return;
-    map.panTo(focusedLocation);
-  }, [map, focusedLocation]);
-
-  return null;
-}
-
-function StationMarkerItem({
-  station,
-  isSelected,
-  onSelect,
-  onClose,
-}: {
-  station: EnrichedGasStation;
-  isSelected: boolean;
-  onSelect: (station: EnrichedGasStation) => void;
-  onClose: () => void;
-}) {
-  const [markerEl, setMarkerEl] =
-    useState<google.maps.marker.AdvancedMarkerElement | null>(null);
-
-  const pinPalette =
-    station.fuelStatus === 'recommended_stop'
-      ? { background: '#d97706', borderColor: '#92400e', glyphColor: '#ffffff' }
-      : station.fuelStatus === 'within_tank'
-        ? { background: '#059669', borderColor: '#065f46', glyphColor: '#ffffff' }
-        : { background: '#475569', borderColor: '#1e293b', glyphColor: '#ffffff' };
-
-  return (
-    <>
-      <AdvancedMarker
-        ref={setMarkerEl}
-        position={station.location}
-        title={station.name}
-        zIndex={station.fuelStatus === 'recommended_stop' ? 30 : 20}
-        onClick={() => onSelect(station)}
-      >
-        <Pin
-          background={pinPalette.background}
-          borderColor={pinPalette.borderColor}
-          glyphColor={pinPalette.glyphColor}
-          scale={isSelected ? 1.25 : station.fuelStatus === 'recommended_stop' ? 1.15 : 0.95}
-        >
-          ⛽
-        </Pin>
-      </AdvancedMarker>
-
-      {isSelected && markerEl && (
-        <InfoWindow
-          anchor={markerEl}
-          maxWidth={290}
-          onCloseClick={onClose}
-        >
-          <div className="p-1 text-slate-900 space-y-1.5 font-sans">
-            <div className="flex items-start justify-between gap-2">
-              <p className="text-sm font-semibold leading-snug">{station.name}</p>
-              {station.openNow !== null && (
-                <span
-                  className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                    station.openNow
-                      ? 'bg-emerald-100 text-emerald-800'
-                      : 'bg-slate-200 text-slate-700'
-                  }`}
-                >
-                  {station.openNow ? 'เปิดอยู่' : 'ปิดอยู่'}
-                </span>
-              )}
-            </div>
-
-            {station.address && (
-              <p className="text-xs text-slate-600 leading-relaxed">{station.address}</p>
-            )}
-
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-700 pt-1 border-t border-slate-100">
-              <span className="font-mono tabular-nums font-medium">
-                {station.routeKmPosition !== null
-                  ? `กม.ที่ ${station.routeKmPosition.toLocaleString('th-TH')}`
-                  : `ห่าง ${station.distanceKmFromOrigin.toLocaleString('th-TH')} กม.`}
-              </span>
-              {station.durationMinutes !== null && (
-                <span className="font-mono tabular-nums text-slate-500">
-                  ~{station.durationMinutes} นาที
-                </span>
-              )}
-              {station.rating !== null && (
-                <span className="inline-flex items-center gap-0.5 text-amber-700 font-mono">
-                  ★ {station.rating.toFixed(1)}
-                </span>
-              )}
-            </div>
-
-            <p
-              className={`text-[11px] font-medium px-2 py-1 rounded ${
-                station.fuelStatus === 'recommended_stop'
-                  ? 'bg-amber-50 text-amber-900'
-                  : station.fuelStatus === 'within_tank'
-                    ? 'bg-emerald-50 text-emerald-900'
-                    : 'bg-slate-100 text-slate-700'
-              }`}
-            >
-              {station.fuelStatus === 'after_refuel'
-                ? 'เกินระยะน้ำมันถังปัจจุบัน (เหมาะเป็นจุดแวะรอบถัดไป)'
-                : `ถึงปั๊มคาดว่าเหลือ ~${station.estimatedRemainingLitersOnArrival} ลิตร (${station.estimatedRemainingPercentOnArrival}%)`}
-            </p>
-
-            {(station.directionsUri || station.googleMapsUri) && (
-              <a
-                href={station.directionsUri ?? station.googleMapsUri ?? '#'}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700 hover:text-blue-900 hover:underline pt-0.5"
-              >
-                <span>เปิดนำทางใน Google Maps</span>
-                <ExternalLink className="w-3 h-3" aria-hidden="true" />
-              </a>
-            )}
-          </div>
-        </InfoWindow>
-      )}
-    </>
-  );
-}
-
-function MilestoneMarkerItem({
-  milestone,
-  isSelected,
-  onSelect,
-  onClose,
-}: {
-  milestone: TankRefuelMilestone;
-  isSelected: boolean;
-  onSelect: (m: TankRefuelMilestone) => void;
-  onClose: () => void;
-}) {
-  const [markerEl, setMarkerEl] =
-    useState<google.maps.marker.AdvancedMarkerElement | null>(null);
-
-  return (
-    <>
-      <AdvancedMarker
-        ref={setMarkerEl}
-        position={milestone.coords}
-        title={milestone.label}
-        zIndex={40}
-        onClick={() => onSelect(milestone)}
-      >
-        <div
-          className={`px-2 py-1 rounded-md border text-[11px] font-mono font-semibold shadow-sm cursor-pointer whitespace-nowrap ${
-            milestone.isFirstStop
-              ? 'bg-red-600 border-red-800 text-white'
-              : 'bg-amber-500 border-amber-700 text-white'
-          }`}
-        >
-          ⚠ กม.{milestone.kmFromOrigin}
-        </div>
-      </AdvancedMarker>
-
-      {isSelected && markerEl && (
-        <InfoWindow anchor={markerEl} maxWidth={250} onCloseClick={onClose}>
-          <div className="p-1 text-slate-900 space-y-1 font-sans">
-            <p className="text-xs font-semibold text-red-700">
-              จุดคาดว่าน้ำมันใกล้หมดระยะปลอดภัย
-            </p>
-            <p className="text-xs text-slate-700">{milestone.label}</p>
-            <p className="text-[11px] text-slate-500">
-              แนะนำให้เลือกปั๊มสีส้มบนเส้นทางก่อนถึงจุดนี้เพื่อความปลอดภัยของระบบเชื้อเพลิง
-            </p>
-          </div>
-        </InfoWindow>
-      )}
-    </>
-  );
-}
-
 export function TripStationsMapPanel({
-  mapsApiKey,
   loading,
   error,
   locationLabel,
@@ -413,7 +149,7 @@ export function TripStationsMapPanel({
     return (
       <div className="border-t border-slate-200 bg-slate-50/70 p-6 flex items-center justify-center gap-3 text-sm text-slate-700">
         <Loader2 className="w-5 h-5 text-blue-700 animate-spin shrink-0" aria-hidden="true" />
-        <span>กำลังระบุพิกัด GPS และค้นหาปั๊มน้ำมันตลอดเส้นทางบน Google Maps...</span>
+        <span>กำลังระบุพิกัด GPS และค้นหาปั๊มน้ำมันตลอดเส้นทางบน OpenStreetMap...</span>
       </div>
     );
   }
@@ -585,95 +321,35 @@ export function TripStationsMapPanel({
       {/* Map + Stations Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
         <div className="lg:col-span-7">
-          {mapsApiKey ? (
-            <div className="w-full h-[380px] sm:h-[440px] rounded-xl overflow-hidden border border-slate-200 bg-slate-100 relative">
-              <APIProvider apiKey={mapsApiKey} language="th" region="TH">
-                <GoogleMap
-                  mapId="DEMO_MAP_ID"
-                  defaultCenter={data.origin}
-                  defaultZoom={12}
-                  gestureHandling="greedy"
-                  internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
-                  className="w-full h-full"
-                >
-                  <RoutePolylineAndBounds
-                    origin={data.origin}
-                    routePoints={routePoints}
-                    endLocation={data.route?.endLocation ?? null}
-                    stations={displayedStations}
-                    focusedLocation={focusedLocation}
-                  />
-
-                  {/* Current / Origin Marker */}
-                  <AdvancedMarker
-                    position={data.origin}
-                    title={locationLabel}
-                    zIndex={50}
-                  >
-                    <Pin
-                      background="#1d4ed8"
-                      borderColor="#1e3a8a"
-                      glyphColor="#ffffff"
-                      scale={1.1}
-                    >
-                      🚗
-                    </Pin>
-                  </AdvancedMarker>
-
-                  {/* Route End Marker */}
-                  {data.route?.endLocation && (
-                    <AdvancedMarker
-                      position={data.route.endLocation}
-                      title={estimate.routeLabel}
-                      zIndex={45}
-                    >
-                      <Pin
-                        background="#0f172a"
-                        borderColor="#020617"
-                        glyphColor="#ffffff"
-                        scale={1.1}
-                      >
-                        🏁
-                      </Pin>
-                    </AdvancedMarker>
-                  )}
-
-                  {/* Low-fuel Warning Milestones */}
-                  {refuelMilestones.map((m) => (
-                    <MilestoneMarkerItem
-                      key={`milestone-${m.index}`}
-                      milestone={m}
-                      isSelected={selectedMilestoneIdx === m.index}
-                      onSelect={(item) => {
-                        setSelectedStationId(null);
-                        setSelectedMilestoneIdx(item.index);
-                      }}
-                      onClose={() => setSelectedMilestoneIdx(null)}
-                    />
-                  ))}
-
-                  {/* Gas Stations */}
-                  {displayedStations.map((st) => (
-                    <StationMarkerItem
-                      key={st.id}
-                      station={st}
-                      isSelected={selectedStationId === st.id}
-                      onSelect={(item) => {
-                        setSelectedMilestoneIdx(null);
-                        setSelectedStationId(item.id);
-                      }}
-                      onClose={() => setSelectedStationId(null)}
-                    />
-                  ))}
-                </GoogleMap>
-              </APIProvider>
-            </div>
-          ) : (
-            <div className="w-full h-[380px] sm:h-[440px] rounded-xl border border-slate-200 bg-slate-50 flex flex-col items-center justify-center p-6 text-center text-sm text-slate-600">
-              <MapPin className="w-8 h-8 text-slate-400 mb-2" aria-hidden="true" />
-              <p>ไม่พบ Google Maps API Key สำหรับแสดงแผนที่</p>
-            </div>
-          )}
+          <div className="w-full h-[380px] sm:h-[440px] rounded-xl overflow-hidden border border-slate-200 bg-slate-100 relative">
+            <OsmMapView
+              origin={data.origin}
+              originLabel={locationLabel}
+              routePoints={routePoints}
+              endLocation={data.route?.endLocation ?? null}
+              endLabel={estimate.routeLabel}
+              stations={displayedStations}
+              milestones={refuelMilestones}
+              focusedLocation={focusedLocation}
+              selectedStationId={selectedStationId}
+              selectedMilestoneIdx={selectedMilestoneIdx}
+              onSelectStation={(id) => {
+                setSelectedMilestoneIdx(null);
+                setSelectedStationId(id);
+              }}
+              onSelectMilestone={(idx) => {
+                setSelectedStationId(null);
+                setSelectedMilestoneIdx(idx);
+              }}
+              onCloseSelection={() => {
+                setSelectedStationId(null);
+                setSelectedMilestoneIdx(null);
+              }}
+            />
+          </div>
+          <p className="text-[11px] text-slate-400 mt-1.5 text-right">
+            แผนที่ © OpenStreetMap contributors · ค้นหาปั๊มด้วย Overpass API · เส้นทางด้วย OSRM
+          </p>
         </div>
 
         {/* Station List */}
