@@ -290,7 +290,7 @@ export function FuelFormModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/50 backdrop-blur-[1px]"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-[1px]"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -299,17 +299,17 @@ export function FuelFormModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="fuel-modal-title"
-        className="w-full max-w-lg bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden max-h-[90vh] flex flex-col"
+        className="w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl overflow-hidden max-h-[90vh] flex flex-col"
       >
-        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
-          <h2 id="fuel-modal-title" className="font-display text-lg font-semibold text-slate-900">
+        <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+          <h2 id="fuel-modal-title" className="font-display text-lg font-semibold text-slate-900 dark:text-slate-100">
             {isEditing ? 'แก้ไขรายการเติมน้ำมัน' : 'บันทึกการเติมน้ำมันใหม่'}
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="ปิดหน้าต่างเติมน้ำมัน"
-            className="p-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 cursor-pointer"
+            className="p-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-100 dark:hover:bg-slate-800 cursor-pointer"
           >
             <X className="w-4 h-4" aria-hidden="true" />
           </button>
@@ -318,7 +318,7 @@ export function FuelFormModal({
         <form onSubmit={handleFormSubmit} noValidate className="p-5 space-y-4 overflow-y-auto">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label htmlFor="fuel-date" className="block text-xs font-medium text-slate-700">
+              <label htmlFor="fuel-date" className="block text-xs font-medium text-slate-700 dark:text-slate-300">
                 วันที่เติมน้ำมัน *
               </label>
               <input
@@ -326,12 +326,12 @@ export function FuelFormModal({
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full min-h-[42px] px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                className="w-full min-h-[42px] px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600"
               />
             </div>
 
             <div className="space-y-1.5">
-              <label htmlFor="fuel-odo" className="block text-xs font-medium text-slate-700">
+              <label htmlFor="fuel-odo" className="block text-xs font-medium text-slate-700 dark:text-slate-300">
                 เลขไมล์หน้าปัด (กม.) *
               </label>
               <input
@@ -340,14 +340,14 @@ export function FuelFormModal({
                 inputMode="numeric"
                 value={odometer}
                 onChange={(e) => handleOdometerChange(e.target.value)}
-                className="w-full min-h-[42px] px-3 py-2 rounded-lg border border-slate-300 bg-white font-mono text-sm tabular-nums text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                className="w-full min-h-[42px] px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-mono text-sm tabular-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="space-y-1.5">
-              <label htmlFor="fuel-amount" className="block text-xs font-medium text-slate-700">
+              <label htmlFor="fuel-amount" className="block text-xs font-medium text-slate-700 dark:text-slate-300">
                 ยอดเงิน (บาท) *
               </label>
               <input
@@ -357,12 +357,12 @@ export function FuelFormModal({
                 value={amount}
                 onChange={(e) => handleAmountOrPriceChange(e.target.value, pricePerLiter)}
                 placeholder="1000"
-                className="w-full min-h-[42px] px-3 py-2 rounded-lg border border-slate-300 bg-white font-mono text-sm tabular-nums text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                className="w-full min-h-[42px] px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-mono text-sm tabular-nums text-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-600"
               />
             </div>
 
             <div className="space-y-1.5">
-              <label htmlFor="fuel-price" className="block text-xs font-medium text-slate-700">
+              <label htmlFor="fuel-price" className="block text-xs font-medium text-slate-700 dark:text-slate-300">
                 ราคา/ลิตร (บาท) *
               </label>
               <input
@@ -372,14 +372,14 @@ export function FuelFormModal({
                 value={pricePerLiter}
                 onChange={(e) => handleAmountOrPriceChange(amount, e.target.value)}
                 placeholder="33.55"
-                className="w-full min-h-[42px] px-3 py-2 rounded-lg border border-slate-300 bg-white font-mono text-sm tabular-nums text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                className="w-full min-h-[42px] px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-mono text-sm tabular-nums text-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-600"
               />
             </div>
 
             <div className="space-y-1.5">
               <label
                 htmlFor="fuel-liters"
-                className="block text-xs font-medium text-slate-700 whitespace-nowrap"
+                className="block text-xs font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap"
               >
                 ปริมาณ (ลิตร ≤ {tankCapacityLiters}) *
               </label>
@@ -391,26 +391,26 @@ export function FuelFormModal({
                 value={liters}
                 onChange={(e) => handleLitersChange(e.target.value)}
                 placeholder="29.806"
-                className={`w-full min-h-[42px] px-3 py-2 rounded-lg border font-mono text-sm tabular-nums focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 ${
+                className={`w-full min-h-[42px] px-3 py-2 rounded-lg border font-mono text-sm tabular-nums focus:bg-white dark:focus:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-blue-600 dark:placeholder:text-slate-500 ${
                   numLiters > tankCapacityLiters
-                    ? 'border-red-400 bg-red-50 text-red-900'
-                    : 'border-slate-300 bg-slate-50 text-slate-900'
+                    ? 'border-red-400 bg-red-50 text-red-900 dark:border-red-700 dark:bg-red-950/50 dark:text-red-200'
+                    : 'border-slate-300 bg-slate-50 text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100'
                 }`}
               />
             </div>
           </div>
 
           {numLiters > tankCapacityLiters && (
-            <p className="text-xs text-red-600 font-medium">
+            <p className="text-xs text-red-600 dark:text-red-400 font-medium">
               ปริมาณน้ำมัน ({numLiters.toFixed(2)} ลิตร) เกินความจุถัง {tankCapacityLiters} ลิตร (กรณีเติมเต็มถังจากไฟเตือนปกติจะอยู่ราว 60–68 ลิตร)
             </p>
           )}
 
           {isEditing ? (
-            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 space-y-3">
+            <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg p-3.5 space-y-3">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <label htmlFor="fuel-edit-distance" className="block text-xs font-medium text-slate-700">
+                  <label htmlFor="fuel-edit-distance" className="block text-xs font-medium text-slate-700 dark:text-slate-300">
                     ระยะทางวิ่งรอบนี้ (กม.)
                   </label>
                   <input
@@ -420,11 +420,11 @@ export function FuelFormModal({
                     step="1"
                     value={distanceOverride}
                     onChange={(e) => handleDistanceChange(e.target.value)}
-                    className="w-full min-h-[40px] px-3 py-2 rounded-lg border border-slate-300 bg-white font-mono text-sm tabular-nums text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                    className="w-full min-h-[40px] px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-mono text-sm tabular-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600"
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label htmlFor="fuel-edit-kml" className="block text-xs font-medium text-slate-700">
+                  <label htmlFor="fuel-edit-kml" className="block text-xs font-medium text-slate-700 dark:text-slate-300">
                     อัตราสิ้นเปลือง (กม./ลิตร)
                   </label>
                   <input
@@ -440,12 +440,12 @@ export function FuelFormModal({
                     }}
                     className={`w-full min-h-[40px] px-3 py-2 rounded-lg border font-mono text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-600 ${
                       isFuelKmlOutOfRange(parsedEditKml)
-                        ? 'border-slate-300 bg-slate-100 text-slate-700'
-                        : 'border-slate-300 bg-white text-slate-900'
+                        ? 'border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                        : 'border-slate-300 bg-white text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100'
                     }`}
                   />
                   {isFuelKmlOutOfRange(parsedEditKml) && (
-                    <p className="text-[11px] text-slate-500">
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
                       นอกช่วง {MIN_REALISTIC_KML}–{MAX_REALISTIC_KML} กม./ล. · ตารางจะแสดงเป็นค่าเฉลี่ยแทน และไม่นำไปคิดค่าเฉลี่ยรวม
                     </p>
                   )}
@@ -454,23 +454,23 @@ export function FuelFormModal({
 
               <div
                 data-testid="fuel-formula-box"
-                className="pt-2 border-t border-slate-200 space-y-1.5 text-xs"
+                className="pt-2 border-t border-slate-200 dark:border-slate-700 space-y-1.5 text-xs"
               >
-                <div className="flex flex-wrap items-center justify-between gap-2 text-slate-700">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-slate-700 dark:text-slate-300">
                   <span className="inline-flex items-center gap-1.5 font-medium">
-                    <Calculator className="w-3.5 h-3.5 text-emerald-700 shrink-0" aria-hidden="true" />
+                    <Calculator className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400 shrink-0" aria-hidden="true" />
                     <span>สูตร: ระยะทาง ÷ ปริมาณ (ลิตร)</span>
                   </span>
-                  <span className="font-mono font-semibold text-emerald-700 tabular-nums">
+                  <span className="font-mono font-semibold text-emerald-700 dark:text-emerald-400 tabular-nums">
                     {formatKm(effectiveDistance)} ÷ {numLiters.toFixed(3)} = {formulaKml.toFixed(2)} กม./ล.
                   </span>
                 </div>
 
                 {previousFuelLog && (
-                  <div className="flex flex-wrap items-center justify-between gap-2 text-slate-500">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-slate-500 dark:text-slate-400">
                     <span>
                       รอบก่อนหน้า ({formatThaiDate(previousFuelLog.date, 'short')}):{' '}
-                      <strong className="font-mono text-slate-700 tabular-nums">
+                      <strong className="font-mono text-slate-700 dark:text-slate-200 tabular-nums">
                         {formatKm(previousFuelLog.odometer)} กม.
                       </strong>
                     </span>
@@ -487,7 +487,7 @@ export function FuelFormModal({
                             );
                           }
                         }}
-                        className="font-medium text-blue-700 hover:text-blue-900 cursor-pointer"
+                        className="font-medium text-blue-700 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 cursor-pointer"
                       >
                         ใช้ระยะ +{formatKm(prevDeltaDistance)} กม. คำนวณใหม่
                       </button>
@@ -504,7 +504,7 @@ export function FuelFormModal({
                         setAutoCalcKml(true);
                         setKmlOverride(String(formulaKml));
                       }}
-                      className="font-medium text-emerald-700 hover:text-emerald-900 cursor-pointer"
+                      className="font-medium text-emerald-700 hover:text-emerald-900 dark:text-emerald-400 dark:hover:text-emerald-300 cursor-pointer"
                     >
                       ใช้ค่าตามสูตร ({formulaKml.toFixed(2)} กม./ล.)
                     </button>
@@ -516,7 +516,7 @@ export function FuelFormModal({
                       setAutoCalcKml(false);
                       setKmlOverride('0');
                     }}
-                    className="font-medium text-amber-700 hover:text-amber-900 cursor-pointer"
+                    className="font-medium text-amber-700 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-300 cursor-pointer"
                   >
                     ตั้ง กม./ลิตร = 0 (ไม่เต็มถัง)
                   </button>
@@ -524,24 +524,24 @@ export function FuelFormModal({
               </div>
             </div>
           ) : (
-            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3.5 space-y-1.5 text-xs">
+            <div className="bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 rounded-lg p-3.5 space-y-1.5 text-xs">
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="text-emerald-800 block">
+                  <span className="text-emerald-800 dark:text-emerald-300 block">
                     ระยะทางวิ่งจากรอบก่อน ({formatKm(latestFuelOdometer)} กม.)
                   </span>
-                  <strong className="font-mono text-sm text-emerald-950 tabular-nums">
+                  <strong className="font-mono text-sm text-emerald-950 dark:text-emerald-100 tabular-nums">
                     +{formatKm(preview.distance)} กม.
                   </strong>
                 </div>
                 <div className="text-right">
-                  <span className="text-emerald-800 block">อัตราสิ้นเปลืองรอบนี้</span>
-                  <strong className="font-mono text-sm text-emerald-700 tabular-nums">
+                  <span className="text-emerald-800 dark:text-emerald-300 block">อัตราสิ้นเปลืองรอบนี้</span>
+                  <strong className="font-mono text-sm text-emerald-700 dark:text-emerald-400 tabular-nums">
                     {preview.kml.toFixed(2)} กม./ลิตร
                   </strong>
                 </div>
               </div>
-              <p className="text-[11px] text-emerald-800 font-mono tabular-nums border-t border-emerald-200/80 pt-1.5">
+              <p className="text-[11px] text-emerald-800 dark:text-emerald-300 font-mono tabular-nums border-t border-emerald-200/80 dark:border-emerald-800/80 pt-1.5">
                 สูตร: {formatKm(preview.distance)} กม. ÷ {preview.liters.toFixed(3)} ลิตร = {preview.kml.toFixed(2)} กม./ล.
               </p>
             </div>
@@ -551,13 +551,13 @@ export function FuelFormModal({
             {!isEditing && (
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between gap-2">
-                  <label htmlFor="fuel-percent" className="block text-xs font-medium text-slate-700">
+                  <label htmlFor="fuel-percent" className="block text-xs font-medium text-slate-700 dark:text-slate-300">
                     ระดับน้ำมันหลังเติม (%)
                   </label>
                   <button
                     type="button"
                     onClick={() => setFuelPercent('100')}
-                    className="text-[11px] font-medium text-emerald-700 hover:text-emerald-900 cursor-pointer"
+                    className="text-[11px] font-medium text-emerald-700 hover:text-emerald-900 dark:text-emerald-400 dark:hover:text-emerald-300 cursor-pointer"
                   >
                     เติมเต็มถัง (100%)
                   </button>
@@ -570,13 +570,13 @@ export function FuelFormModal({
                   value={fuelPercent}
                   onChange={(e) => setFuelPercent(e.target.value)}
                   placeholder="เช่น 100 (ความจุถัง 75 ล.)"
-                  className="w-full min-h-[42px] px-3 py-2 rounded-lg border border-slate-300 bg-white font-mono text-sm tabular-nums text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  className="w-full min-h-[42px] px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-mono text-sm tabular-nums text-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
             )}
 
             <div className="space-y-1.5">
-              <label htmlFor="fuel-note" className="block text-xs font-medium text-slate-700">
+              <label htmlFor="fuel-note" className="block text-xs font-medium text-slate-700 dark:text-slate-300">
                 ปั๊ม / ประเภทน้ำมัน *
               </label>
               <input
@@ -585,29 +585,29 @@ export function FuelFormModal({
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 placeholder="เช่น บางจาก (ดีเซล B20)"
-                className="w-full min-h-[42px] px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                className="w-full min-h-[42px] px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm text-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-600"
               />
             </div>
           </div>
 
           {errorMsg && (
-            <p role="alert" className="text-xs text-red-600 font-medium">
+            <p role="alert" className="text-xs text-red-600 dark:text-red-400 font-medium">
               {errorMsg}
             </p>
           )}
 
-          <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
+          <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
             <button
               type="button"
               onClick={onClose}
-              className="min-h-[40px] px-4 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium cursor-pointer"
+              className="min-h-[40px] px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium cursor-pointer"
             >
               ยกเลิก
             </button>
             <button
               type="submit"
               disabled={submitting}
-              className="min-h-[40px] px-5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 text-white text-sm font-medium cursor-pointer"
+              className="min-h-[40px] px-5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500 disabled:opacity-60 text-white text-sm font-medium cursor-pointer"
             >
               {submitting
                 ? 'กำลังบันทึก...'

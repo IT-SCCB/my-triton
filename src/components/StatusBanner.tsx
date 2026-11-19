@@ -10,18 +10,18 @@ export function StatusBanner({ banner, onViewSchedule }: StatusBannerProps) {
   const styles =
     banner.level === 'overdue'
       ? {
-          bg: 'bg-red-700 text-white',
+          bg: 'bg-red-700 dark:bg-red-800 text-white',
           btn: 'bg-white/15 hover:bg-white/25 text-white',
           Icon: AlertOctagon,
         }
       : banner.level === 'warning'
         ? {
-            bg: 'bg-amber-400 text-slate-950',
+            bg: 'bg-amber-400 dark:bg-amber-500 text-slate-950',
             btn: 'bg-slate-950/10 hover:bg-slate-950/20 text-slate-950',
             Icon: AlertTriangle,
           }
         : {
-            bg: 'bg-emerald-700 text-white',
+            bg: 'bg-emerald-700 dark:bg-emerald-800 text-white',
             btn: '',
             Icon: CheckCircle2,
           };

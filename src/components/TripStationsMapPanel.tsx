@@ -154,30 +154,33 @@ export function TripStationsMapPanel({
     );
   }
 
-  if (error) {
-    return (
-      <div className="border-t border-slate-200 bg-red-50/60 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-start gap-2.5 text-sm text-red-900">
-          <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" aria-hidden="true" />
-          <div>
-            <p className="font-medium">ไม่สามารถโหลดแผนที่หรือค้นหาปั๊มน้ำมันได้</p>
-            <p className="text-xs text-red-800 mt-0.5">{error}</p>
+  // แผนที่กับเส้นทางไม่พึ่งข้อมูลปั๊ม — ถ้ามี data แล้วให้แสดงแผงเสมอ
+  // error (เช่น โหลดไฟล์ปั๊มไม่ได้) แสดงเป็นป้ายเตือนข้างในแผงแทนการซ่อนทั้งแผง
+  if (!data) {
+    if (error) {
+      return (
+        <div className="border-t border-slate-200 bg-red-50/60 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-2.5 text-sm text-red-900">
+            <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" aria-hidden="true" />
+            <div>
+              <p className="font-medium">ไม่สามารถโหลดแผนที่หรือค้นหาปั๊มน้ำมันได้</p>
+              <p className="text-xs text-red-800 mt-0.5">{error}</p>
+            </div>
           </div>
+          {onRetrySearch && (
+            <button
+              type="button"
+              onClick={onRetrySearch}
+              className="px-3.5 py-2 rounded-lg border border-red-300 bg-white text-red-900 hover:bg-red-50 text-xs font-medium cursor-pointer shrink-0 self-start sm:self-auto"
+            >
+              ลองค้นหาอีกครั้ง
+            </button>
+          )}
         </div>
-        {onRetrySearch && (
-          <button
-            type="button"
-            onClick={onRetrySearch}
-            className="px-3.5 py-2 rounded-lg border border-red-300 bg-white text-red-900 hover:bg-red-50 text-xs font-medium cursor-pointer shrink-0 self-start sm:self-auto"
-          >
-            ลองค้นหาอีกครั้ง
-          </button>
-        )}
-      </div>
-    );
+      );
+    }
+    return null;
   }
-
-  if (!data) return null;
 
   return (
     <div
@@ -253,6 +256,22 @@ export function TripStationsMapPanel({
           </div>
         </div>
       </div>
+
+      {error && (
+        <div className="text-xs text-red-900 bg-red-50 border border-red-200 rounded-lg px-3.5 py-2 flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" aria-hidden="true" />
+          <span>{error}</span>
+          {onRetrySearch && (
+            <button
+              type="button"
+              onClick={onRetrySearch}
+              className="ml-auto px-2.5 py-1 rounded-md border border-red-300 bg-white text-red-900 hover:bg-red-50 text-[11px] font-medium cursor-pointer shrink-0"
+            >
+              ลองค้นหาอีกครั้ง
+            </button>
+          )}
+        </div>
+      )}
 
       {data.routeNotice && (
         <div className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3.5 py-2 flex items-center gap-2">
@@ -348,7 +367,7 @@ export function TripStationsMapPanel({
             />
           </div>
           <p className="text-[11px] text-slate-400 mt-1.5 text-right">
-            แผนที่ © OpenStreetMap contributors · ค้นหาปั๊มด้วย Overpass API · เส้นทางด้วย OSRM
+            แผนที่ © OpenStreetMap contributors · ข้อมูลปั๊ม OSM (ไฟล์ static 19 พ.ย. 2569) · เส้นทางด้วย OSRM
           </p>
         </div>
 

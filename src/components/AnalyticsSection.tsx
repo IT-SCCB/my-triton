@@ -44,6 +44,7 @@ interface AnalyticsSectionProps {
   services: ServiceRecord[];
   odometerLogs: OdometerLogEntry[];
   onEditFuelLog?: (log: FuelLogEntry) => void;
+  isDark?: boolean;
 }
 
 interface FuelChartPoint extends FuelLogEntry {
@@ -120,6 +121,7 @@ interface CustomFuelDotProps {
   payload?: FuelChartPoint;
   totalCount: number;
   selectedId?: string | null;
+  isDark?: boolean;
 }
 
 function CustomFuelDot({
@@ -129,11 +131,14 @@ function CustomFuelDot({
   payload,
   totalCount,
   selectedId,
+  isDark = false,
 }: CustomFuelDotProps) {
   if (typeof cx !== 'number' || typeof cy !== 'number' || !payload) {
     return <g key={`fuel-empty-${index ?? 0}`} />;
   }
 
+  const dotStrokeSurface = isDark ? '#0f172a' : '#ffffff';
+  const fuelStroke = isDark ? '#10b981' : '#059669';
   const isSelected = selectedId === payload.id;
   if (payload.isAnomaly) {
     return (
@@ -143,7 +148,7 @@ function CustomFuelDot({
         cy={cy}
         r={5.5}
         fill="#d97706"
-        stroke="#ffffff"
+        stroke={dotStrokeSurface}
         strokeWidth={2}
       />
     );
@@ -156,8 +161,8 @@ function CustomFuelDot({
         cx={cx}
         cy={cy}
         r={isSelected ? 5.5 : 3.5}
-        fill="#ffffff"
-        stroke="#059669"
+        fill={dotStrokeSurface}
+        stroke={fuelStroke}
         strokeWidth={isSelected ? 3 : 2}
       />
     );
@@ -239,12 +244,15 @@ interface CustomTrendDotProps {
   cy?: number;
   index?: number;
   payload?: MonthlyMaintenanceTrendPoint;
+  isDark?: boolean;
 }
 
-function CustomTrendDot({ cx, cy, index, payload }: CustomTrendDotProps) {
+function CustomTrendDot({ cx, cy, index, payload, isDark = false }: CustomTrendDotProps) {
   if (typeof cx !== 'number' || typeof cy !== 'number' || !payload) {
     return <g key={`empty-${index ?? 0}`} />;
   }
+
+  const dotStrokeSurface = isDark ? '#0f172a' : '#ffffff';
 
   if (payload.isSpike) {
     return (
@@ -254,7 +262,7 @@ function CustomTrendDot({ cx, cy, index, payload }: CustomTrendDotProps) {
         cy={cy}
         r={5.5}
         fill="#d97706"
-        stroke="#ffffff"
+        stroke={dotStrokeSurface}
         strokeWidth={2}
       />
     );
@@ -267,8 +275,8 @@ function CustomTrendDot({ cx, cy, index, payload }: CustomTrendDotProps) {
         cx={cx}
         cy={cy}
         r={4}
-        fill="#1d4ed8"
-        stroke="#ffffff"
+        fill={isDark ? '#3b82f6' : '#1d4ed8'}
+        stroke={dotStrokeSurface}
         strokeWidth={2}
       />
     );
@@ -280,8 +288,8 @@ function CustomTrendDot({ cx, cy, index, payload }: CustomTrendDotProps) {
       cx={cx}
       cy={cy}
       r={2.5}
-      fill="#cbd5e1"
-      stroke="#ffffff"
+      fill={isDark ? '#475569' : '#cbd5e1'}
+      stroke={dotStrokeSurface}
       strokeWidth={1}
     />
   );
@@ -433,6 +441,7 @@ interface CustomMonthlyOdoDotProps {
   cy?: number;
   index?: number;
   payload?: MonthlyOdometerPoint;
+  isDark?: boolean;
 }
 
 function CustomMonthlyOdoDot({
@@ -440,10 +449,13 @@ function CustomMonthlyOdoDot({
   cy,
   index,
   payload,
+  isDark = false,
 }: CustomMonthlyOdoDotProps) {
   if (typeof cx !== 'number' || typeof cy !== 'number' || !payload) {
     return <g key={`monthly-odo-empty-${index ?? 0}`} />;
   }
+
+  const dotSurface = isDark ? '#0f172a' : '#ffffff';
 
   if (payload.isPeakMonth) {
     return (
@@ -453,7 +465,7 @@ function CustomMonthlyOdoDot({
         cy={cy}
         r={5.5}
         fill="#d97706"
-        stroke="#ffffff"
+        stroke={dotSurface}
         strokeWidth={2}
       />
     );
@@ -465,8 +477,8 @@ function CustomMonthlyOdoDot({
       cx={cx}
       cy={cy}
       r={4}
-      fill="#ffffff"
-      stroke="#0f766e"
+      fill={dotSurface}
+      stroke={isDark ? '#2dd4bf' : '#0f766e'}
       strokeWidth={2.5}
     />
   );
@@ -478,6 +490,7 @@ export function AnalyticsSection({
   services,
   odometerLogs,
   onEditFuelLog,
+  isDark = false,
 }: AnalyticsSectionProps) {
   const [showOutliers, setShowOutliers] = useState(false);
   const [fuelRange, setFuelRange] = useState<'recent' | 'all'>('recent');
@@ -575,25 +588,38 @@ export function AnalyticsSection({
   const fuelDash = (costSummary.fuelPercentShare / 100) * circumference;
   const maintDash = circumference - fuelDash;
 
+  const gridStroke = isDark ? '#1e293b' : '#e2e8f0';
+  const axisLineStroke = isDark ? '#334155' : '#cbd5e1';
+  const tickColor = isDark ? '#94a3b8' : '#64748b';
+  const primaryTickColor = isDark ? '#94a3b8' : '#475569';
+  const refLineStroke = isDark ? '#64748b' : '#64748b';
+  const refLabelColor = isDark ? '#cbd5e1' : '#475569';
+  const cursorStroke = isDark ? '#64748b' : '#94a3b8';
+  const dotStrokeSurface = isDark ? '#0f172a' : '#ffffff';
+  const fuelLineStroke = isDark ? '#10b981' : '#059669';
+  const maintLineStroke = isDark ? '#3b82f6' : '#1d4ed8';
+  const odoLineStroke = isDark ? '#818cf8' : '#4338ca';
+  const monthlyOdoStroke = isDark ? '#2dd4bf' : '#0f766e';
+
   return (
     <section aria-label="กราฟและสถิติวิเคราะห์" className="space-y-4 sm:space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
         {/* Fuel Efficiency Trend (Recharts with outlier guard) */}
         <div
           data-testid="fuel-efficiency-chart"
-          className="lg:col-span-8 bg-white border border-slate-200 rounded-xl p-5 sm:p-6 flex flex-col justify-between gap-4"
+          className="lg:col-span-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 sm:p-6 flex flex-col justify-between gap-4 transition-colors"
         >
           <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
             <div>
-              <h2 className="font-display text-base sm:text-lg font-semibold text-slate-900 flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-emerald-700 shrink-0" aria-hidden="true" />
+              <h2 className="font-display text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-emerald-700 dark:text-emerald-400 shrink-0" aria-hidden="true" />
                 <span>กราฟแนวโน้มอัตราสิ้นเปลือง (กม./ลิตร)</span>
               </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                 {selectedLog ? (
                   <>
                     ล่าสุดที่เลือก:{' '}
-                    <strong className="font-mono text-emerald-700 tabular-nums">
+                    <strong className="font-mono text-emerald-700 dark:text-emerald-400 tabular-nums">
                       {selectedLog.kml.toFixed(2)} กม./ลิตร
                     </strong>{' '}
                     ({formatThaiDate(selectedLog.date, 'short')} · {selectedLog.note || 'ดีเซล'})
@@ -608,7 +634,7 @@ export function AnalyticsSection({
               <div
                 role="group"
                 aria-label="ช่วงจำนวนรอบการเติมน้ำมัน"
-                className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-lg self-start shrink-0"
+                className="inline-flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg self-start shrink-0"
               >
                 <button
                   type="button"
@@ -616,8 +642,8 @@ export function AnalyticsSection({
                   aria-pressed={fuelRange === 'recent'}
                   className={`px-2.5 py-1 min-h-[30px] rounded-md text-xs font-medium transition-colors whitespace-nowrap cursor-pointer ${
                     fuelRange === 'recent'
-                      ? 'bg-white text-slate-900 shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
+                      ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
                   }`}
                 >
                   20 รอบล่าสุด
@@ -628,8 +654,8 @@ export function AnalyticsSection({
                   aria-pressed={fuelRange === 'all'}
                   className={`px-2.5 py-1 min-h-[30px] rounded-md text-xs font-medium transition-colors whitespace-nowrap cursor-pointer ${
                     fuelRange === 'all'
-                      ? 'bg-white text-slate-900 shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
+                      ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
                   }`}
                 >
                   ทั้งหมด ({showOutliers ? totalPositiveCount : totalPositiveCount - outlierLogs.length})
@@ -639,7 +665,7 @@ export function AnalyticsSection({
           </div>
 
           {fuelChartData.length === 0 ? (
-            <div className="h-52 flex items-center justify-center text-sm text-slate-500">
+            <div className="h-52 flex items-center justify-center text-sm text-slate-500 dark:text-slate-400">
               ยังไม่มีข้อมูลอัตราสิ้นเปลืองสำหรับแสดงกราฟ
             </div>
           ) : (
@@ -657,39 +683,39 @@ export function AnalyticsSection({
                 >
                   <defs>
                     <linearGradient id="fuelAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#059669" stopOpacity={0.22} />
-                      <stop offset="100%" stopColor="#059669" stopOpacity={0.01} />
+                      <stop offset="0%" stopColor={fuelLineStroke} stopOpacity={isDark ? 0.28 : 0.22} />
+                      <stop offset="100%" stopColor={fuelLineStroke} stopOpacity={0.01} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridStroke} />
                   <XAxis
                     dataKey="shortDate"
-                    tick={{ fill: '#64748b', fontSize: 11 }}
-                    axisLine={{ stroke: '#cbd5e1' }}
+                    tick={{ fill: tickColor, fontSize: 11 }}
+                    axisLine={{ stroke: axisLineStroke }}
                     tickLine={false}
                     minTickGap={34}
                   />
                   <YAxis
                     domain={[yDomainMin, yDomainMax]}
                     tickFormatter={(v: number) => `${v}`}
-                    tick={{ fill: '#64748b', fontSize: 11 }}
+                    tick={{ fill: tickColor, fontSize: 11 }}
                     axisLine={false}
                     tickLine={false}
                     width={36}
                   />
                   <Tooltip
                     content={<CustomFuelTooltip />}
-                    cursor={{ stroke: '#94a3b8', strokeDasharray: '3 3' }}
+                    cursor={{ stroke: cursorStroke, strokeDasharray: '3 3' }}
                   />
                   {chartAvgKml > 0 && !showOutliers && (
                     <ReferenceLine
                       y={chartAvgKml}
-                      stroke="#64748b"
+                      stroke={refLineStroke}
                       strokeDasharray="4 4"
                       label={{
                         value: `เฉลี่ย ${chartAvgKml.toFixed(2)} กม./ล.`,
                         position: 'insideTopRight',
-                        fill: '#475569',
+                        fill: refLabelColor,
                         fontSize: 11,
                       }}
                     />
@@ -698,7 +724,7 @@ export function AnalyticsSection({
                     type="monotone"
                     dataKey="kml"
                     name="อัตราสิ้นเปลือง (กม./ลิตร)"
-                    stroke="#059669"
+                    stroke={fuelLineStroke}
                     strokeWidth={2.25}
                     fill="url(#fuelAreaGrad)"
                     animationDuration={200}
@@ -711,12 +737,13 @@ export function AnalyticsSection({
                         payload={dotProps.payload as FuelChartPoint}
                         totalCount={fuelChartData.length}
                         selectedId={selectedLog?.id}
+                        isDark={isDark}
                       />
                     )}
                     activeDot={{
                       r: 6,
-                      fill: '#059669',
-                      stroke: '#ffffff',
+                      fill: fuelLineStroke,
+                      stroke: dotStrokeSurface,
                       strokeWidth: 2,
                     }}
                   />
@@ -728,10 +755,10 @@ export function AnalyticsSection({
           {outlierLogs.length > 0 && (
             <div
               data-testid="fuel-outlier-banner"
-              className="pt-2.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs"
+              className="pt-2.5 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs"
             >
-              <div className="flex items-center gap-1.5 text-slate-600">
-                <AlertTriangle className="w-3.5 h-3.5 text-slate-500 shrink-0" aria-hidden="true" />
+              <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
+                <AlertTriangle className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 shrink-0" aria-hidden="true" />
                 <span>
                   {showOutliers
                     ? `กำลังแสดงรวมรอบไม่เต็มถัง / ข้ามรอบ ${outlierLogs.length} รายการ (นอกช่วง ${MIN_REALISTIC_KML}–${MAX_REALISTIC_KML} กม./ล.)`
@@ -743,7 +770,7 @@ export function AnalyticsSection({
                   type="button"
                   data-testid="toggle-fuel-outliers-btn"
                   onClick={() => setShowOutliers((prev) => !prev)}
-                  className="font-medium text-slate-700 hover:text-slate-900 underline underline-offset-2 cursor-pointer"
+                  className="font-medium text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white underline underline-offset-2 cursor-pointer"
                 >
                   {showOutliers
                     ? `แสดงเฉพาะรอบปกติ (${MIN_REALISTIC_KML}–${MAX_REALISTIC_KML} กม./ล.)`
@@ -754,7 +781,7 @@ export function AnalyticsSection({
                     type="button"
                     data-testid="fix-outlier-fuel-btn"
                     onClick={() => onEditFuelLog(outlierLogs[0])}
-                    className="font-medium text-blue-700 hover:text-blue-900 cursor-pointer"
+                    className="font-medium text-blue-700 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 cursor-pointer"
                   >
                     ตรวจสอบรายการ
                   </button>
@@ -765,13 +792,13 @@ export function AnalyticsSection({
         </div>
 
         {/* Expense Breakdown Donut */}
-        <div className="lg:col-span-4 bg-white border border-slate-200 rounded-xl p-5 sm:p-6 flex flex-col justify-between gap-4">
+        <div className="lg:col-span-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 sm:p-6 flex flex-col justify-between gap-4 transition-colors">
           <div>
-            <h2 className="font-display text-base sm:text-lg font-semibold text-slate-900 flex items-center gap-2">
-              <PieChart className="w-5 h-5 text-blue-700 shrink-0" aria-hidden="true" />
+            <h2 className="font-display text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <PieChart className="w-5 h-5 text-blue-700 dark:text-blue-400 shrink-0" aria-hidden="true" />
               <span>สัดส่วนค่าใช้จ่าย</span>
             </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               แยกตามหมวดหมู่เชื้อเพลิงและซ่อมบำรุง
             </p>
           </div>
@@ -784,7 +811,7 @@ export function AnalyticsSection({
                   cy="70"
                   r={radius}
                   fill="none"
-                  stroke="#1d4ed8"
+                  stroke={isDark ? '#3b82f6' : '#1d4ed8'}
                   strokeWidth="16"
                   strokeDasharray={`${maintDash} ${circumference}`}
                   strokeDashoffset={-fuelDash}
@@ -794,36 +821,36 @@ export function AnalyticsSection({
                   cy="70"
                   r={radius}
                   fill="none"
-                  stroke="#059669"
+                  stroke={isDark ? '#10b981' : '#059669'}
                   strokeWidth="16"
                   strokeDasharray={`${fuelDash} ${circumference}`}
                 />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                <span className="text-[11px] text-slate-500">รวมสุทธิ</span>
-                <span className="font-mono text-base font-bold text-slate-900 tabular-nums">
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">รวมสุทธิ</span>
+                <span className="font-mono text-base font-bold text-slate-900 dark:text-slate-100 tabular-nums">
                   {formatBaht(costSummary.totalCost)} ฿
                 </span>
               </div>
             </div>
           </div>
 
-          <div className="pt-3 border-t border-slate-100 space-y-2 text-xs">
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2 text-xs">
             <div className="flex items-center justify-between gap-2">
-              <span className="flex items-center gap-2 text-slate-600">
-                <span className="w-2.5 h-2.5 rounded-sm bg-emerald-600 shrink-0" aria-hidden="true" />
+              <span className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                <span className="w-2.5 h-2.5 rounded-sm bg-emerald-600 dark:bg-emerald-500 shrink-0" aria-hidden="true" />
                 <span>ค่าน้ำมันเชื้อเพลิง</span>
               </span>
-              <span className="font-mono font-semibold text-slate-900 tabular-nums">
+              <span className="font-mono font-semibold text-slate-900 dark:text-slate-100 tabular-nums">
                 {costSummary.fuelPercentShare}% ({formatBaht(costSummary.totalFuelCost)} บ.)
               </span>
             </div>
             <div className="flex items-center justify-between gap-2">
-              <span className="flex items-center gap-2 text-slate-600">
-                <span className="w-2.5 h-2.5 rounded-sm bg-blue-700 shrink-0" aria-hidden="true" />
+              <span className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                <span className="w-2.5 h-2.5 rounded-sm bg-blue-700 dark:bg-blue-500 shrink-0" aria-hidden="true" />
                 <span>ค่าซ่อมบำรุงและอะไหล่</span>
               </span>
-              <span className="font-mono font-semibold text-slate-900 tabular-nums">
+              <span className="font-mono font-semibold text-slate-900 dark:text-slate-100 tabular-nums">
                 {costSummary.maintenancePercentShare}% ({formatBaht(costSummary.totalMaintenanceCost)} บ.)
               </span>
             </div>
@@ -834,28 +861,28 @@ export function AnalyticsSection({
       {/* Month-over-Month Maintenance Cost Trend (Recharts) */}
       <div
         data-testid="maintenance-trend-chart"
-        className="bg-white border border-slate-200 rounded-xl p-5 sm:p-6 space-y-4"
+        className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 sm:p-6 space-y-4 transition-colors"
       >
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           <div>
-            <h2 className="font-display text-base sm:text-lg font-semibold text-slate-900 flex items-center gap-2">
-              <Activity className="w-5 h-5 text-blue-700 shrink-0" aria-hidden="true" />
+            <h2 className="font-display text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <Activity className="w-5 h-5 text-blue-700 dark:text-blue-400 shrink-0" aria-hidden="true" />
               <span>แนวโน้มค่าใช้จ่ายซ่อมบำรุงรายเดือน (MoM)</span>
             </h2>
-            <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
               ยอดรวม{' '}
-              <strong className="font-mono tabular-nums text-slate-800">
+              <strong className="font-mono tabular-nums text-slate-800 dark:text-slate-200">
                 {formatBaht(trend.totalPeriodCost)} บาท
               </strong>{' '}
               · เฉลี่ย/เดือน{' '}
-              <strong className="font-mono tabular-nums text-slate-800">
+              <strong className="font-mono tabular-nums text-slate-800 dark:text-slate-200">
                 {formatBaht(trend.monthlyAverage)} บาท
               </strong>
               {trend.peakMonth && (
                 <>
                   {' '}
                   · เดือนสูงสุด{' '}
-                  <strong className="font-mono tabular-nums text-amber-700">
+                  <strong className="font-mono tabular-nums text-amber-700 dark:text-amber-400">
                     {trend.peakMonth.monthLabel} ({formatBaht(trend.peakMonth.totalCost)} บ.)
                   </strong>
                 </>
@@ -866,7 +893,7 @@ export function AnalyticsSection({
           <div
             role="group"
             aria-label="ช่วงเวลาย้อนหลังของกราฟค่าซ่อมบำรุง"
-            className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-lg self-start lg:self-auto"
+            className="inline-flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg self-start lg:self-auto"
           >
             <button
               type="button"
@@ -874,8 +901,8 @@ export function AnalyticsSection({
               aria-pressed={trendRange === '6m'}
               className={`px-3 py-1.5 min-h-[34px] rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                 trendRange === '6m'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
               }`}
             >
               6 เดือนล่าสุด
@@ -886,8 +913,8 @@ export function AnalyticsSection({
               aria-pressed={trendRange === '12m'}
               className={`px-3 py-1.5 min-h-[34px] rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                 trendRange === '12m'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
               }`}
             >
               12 เดือนล่าสุด
@@ -896,7 +923,7 @@ export function AnalyticsSection({
         </div>
 
         {trend.totalPeriodCost === 0 ? (
-          <div className="h-56 flex items-center justify-center border border-dashed border-slate-200 rounded-lg text-sm text-slate-500">
+          <div className="h-56 flex items-center justify-center border border-dashed border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-500 dark:text-slate-400">
             ยังไม่มีรายการค่าใช้จ่ายซ่อมบำรุงในช่วง {trendRange === '12m' ? '12' : '6'} เดือนล่าสุด
           </div>
         ) : (
@@ -909,39 +936,39 @@ export function AnalyticsSection({
                 >
                   <defs>
                     <linearGradient id="maintTrendGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#1d4ed8" stopOpacity={0.22} />
-                      <stop offset="100%" stopColor="#1d4ed8" stopOpacity={0.01} />
+                      <stop offset="0%" stopColor={maintLineStroke} stopOpacity={isDark ? 0.28 : 0.22} />
+                      <stop offset="100%" stopColor={maintLineStroke} stopOpacity={0.01} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridStroke} />
                   <XAxis
                     dataKey="shortLabel"
-                    tick={{ fill: '#475569', fontSize: 11 }}
-                    axisLine={{ stroke: '#cbd5e1' }}
+                    tick={{ fill: primaryTickColor, fontSize: 11 }}
+                    axisLine={{ stroke: axisLineStroke }}
                     tickLine={false}
                     interval={0}
                   />
                   <YAxis
                     tickFormatter={(val: number) => formatBaht(val)}
-                    tick={{ fill: '#64748b', fontSize: 11 }}
+                    tick={{ fill: tickColor, fontSize: 11 }}
                     axisLine={false}
                     tickLine={false}
                     width={56}
                   />
                   <Tooltip
                     content={<CustomTrendTooltip />}
-                    cursor={{ stroke: '#94a3b8', strokeDasharray: '3 3' }}
+                    cursor={{ stroke: cursorStroke, strokeDasharray: '3 3' }}
                   />
                   {trend.monthlyAverage > 0 && (
                     <ReferenceLine
                       y={trend.monthlyAverage}
-                      stroke="#64748b"
+                      stroke={refLineStroke}
                       strokeDasharray="4 4"
                       label={{
                         value: `เฉลี่ย ${formatBaht(trend.monthlyAverage)} บ.`,
                         position: 'insideBottomLeft',
                         dy: -6,
-                        fill: '#475569',
+                        fill: refLabelColor,
                         fontSize: 11,
                       }}
                     />
@@ -950,15 +977,15 @@ export function AnalyticsSection({
                     type="monotone"
                     dataKey="totalCost"
                     name="ค่าซ่อมบำรุงรายเดือน (บาท)"
-                    stroke="#1d4ed8"
+                    stroke={maintLineStroke}
                     strokeWidth={2.5}
                     fill="url(#maintTrendGrad)"
                     animationDuration={200}
-                    dot={<CustomTrendDot />}
+                    dot={<CustomTrendDot isDark={isDark} />}
                     activeDot={{
                       r: 6,
-                      fill: '#1d4ed8',
-                      stroke: '#ffffff',
+                      fill: maintLineStroke,
+                      stroke: dotStrokeSurface,
                       strokeWidth: 2,
                     }}
                   />
@@ -966,20 +993,20 @@ export function AnalyticsSection({
               </ResponsiveContainer>
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs text-slate-500">
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400">
               <div className="flex flex-wrap items-center gap-4">
                 <span className="inline-flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-blue-700 shrink-0" aria-hidden="true" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-700 dark:bg-blue-500 shrink-0" aria-hidden="true" />
                   <span>ค่าซ่อมบำรุงรายเดือน</span>
                 </span>
                 <span className="inline-flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-amber-600 shrink-0" aria-hidden="true" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-600 dark:bg-amber-500 shrink-0" aria-hidden="true" />
                   <span>
                     จุดพีคค่าใช้จ่ายสูง (≥ {formatBaht(trend.spikeThreshold)} บ.)
                   </span>
                 </span>
               </div>
-              <span className="font-mono tabular-nums text-slate-500">
+              <span className="font-mono tabular-nums text-slate-500 dark:text-slate-400">
                 มีค่าใช้จ่าย {trend.activeMonthCount} จาก {trend.points.length} เดือน
               </span>
             </div>
@@ -990,23 +1017,23 @@ export function AnalyticsSection({
       {/* Odometer Readings Over Time (Recharts LineChart) */}
       <div
         data-testid="odometer-trend-chart"
-        className="bg-white border border-slate-200 rounded-xl p-5 sm:p-6 space-y-4"
+        className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 sm:p-6 space-y-4 transition-colors"
       >
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           <div>
-            <h2 className="font-display text-base sm:text-lg font-semibold text-slate-900 flex items-center gap-2">
-              <Gauge className="w-5 h-5 text-indigo-700 shrink-0" aria-hidden="true" />
+            <h2 className="font-display text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <Gauge className="w-5 h-5 text-indigo-700 dark:text-indigo-400 shrink-0" aria-hidden="true" />
               <span>กราฟแนวโน้มเลขไมล์สะสมและการใช้งานรถ</span>
             </h2>
-            <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
               {odometerTrend.points.length >= 2 ? (
                 <>
                   เฉลี่ยใช้งาน{' '}
-                  <strong className="font-mono tabular-nums text-indigo-700">
+                  <strong className="font-mono tabular-nums text-indigo-700 dark:text-indigo-400">
                     ~{formatKm(odometerTrend.averageMonthlyKm)} กม./เดือน
                   </strong>{' '}
                   ({odometerTrend.averageDailyKm.toFixed(1)} กม./วัน) · ระยะที่บันทึก{' '}
-                  <strong className="font-mono tabular-nums text-slate-800">
+                  <strong className="font-mono tabular-nums text-slate-800 dark:text-slate-200">
                     +{formatKm(odometerTrend.totalTrackedKm)} กม.
                   </strong>{' '}
                   ใน {odometerTrend.spanDays} วัน
@@ -1020,7 +1047,7 @@ export function AnalyticsSection({
           <div
             role="group"
             aria-label="ช่วงเวลาของกราฟเลขไมล์"
-            className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-lg self-start lg:self-auto"
+            className="inline-flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg self-start lg:self-auto"
           >
             <button
               type="button"
@@ -1028,8 +1055,8 @@ export function AnalyticsSection({
               aria-pressed={odometerRange === '30d'}
               className={`px-3 py-1.5 min-h-[34px] rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                 odometerRange === '30d'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
               }`}
             >
               30 วันล่าสุด
@@ -1040,8 +1067,8 @@ export function AnalyticsSection({
               aria-pressed={odometerRange === '90d'}
               className={`px-3 py-1.5 min-h-[34px] rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                 odometerRange === '90d'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
               }`}
             >
               90 วันล่าสุด
@@ -1052,8 +1079,8 @@ export function AnalyticsSection({
               aria-pressed={odometerRange === 'all'}
               className={`px-3 py-1.5 min-h-[34px] rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                 odometerRange === 'all'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
               }`}
             >
               ทั้งหมด
@@ -1062,7 +1089,7 @@ export function AnalyticsSection({
         </div>
 
         {odometerTrend.points.length === 0 ? (
-          <div className="h-56 flex items-center justify-center border border-dashed border-slate-200 rounded-lg text-sm text-slate-500">
+          <div className="h-56 flex items-center justify-center border border-dashed border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-500 dark:text-slate-400">
             ยังไม่มีประวัติการบันทึกเลขไมล์สำหรับแสดงกราฟ
           </div>
         ) : (
@@ -1073,42 +1100,42 @@ export function AnalyticsSection({
                   data={odometerTrend.points}
                   margin={{ top: 16, right: 24, left: 8, bottom: 4 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridStroke} />
                   <XAxis
                     dataKey="shortDate"
-                    tick={{ fill: '#475569', fontSize: 11 }}
-                    axisLine={{ stroke: '#cbd5e1' }}
+                    tick={{ fill: primaryTickColor, fontSize: 11 }}
+                    axisLine={{ stroke: axisLineStroke }}
                     tickLine={false}
                     minTickGap={30}
                   />
                   <YAxis
                     domain={[odoYMin, odoYMax]}
                     tickFormatter={(val: number) => formatKm(val)}
-                    tick={{ fill: '#64748b', fontSize: 11 }}
+                    tick={{ fill: tickColor, fontSize: 11 }}
                     axisLine={false}
                     tickLine={false}
                     width={64}
                   />
                   <Tooltip
                     content={<CustomOdometerTooltip />}
-                    cursor={{ stroke: '#94a3b8', strokeDasharray: '3 3' }}
+                    cursor={{ stroke: cursorStroke, strokeDasharray: '3 3' }}
                   />
                   <Line
                     type="monotone"
                     dataKey="odometer"
                     name="เลขไมล์สะสม (กม.)"
-                    stroke="#4338ca"
+                    stroke={odoLineStroke}
                     strokeWidth={2.5}
                     animationDuration={200}
                     dot={
                       odometerTrend.points.length <= 30
-                        ? { r: 4, fill: '#ffffff', stroke: '#4338ca', strokeWidth: 2 }
+                        ? { r: 4, fill: dotStrokeSurface, stroke: odoLineStroke, strokeWidth: 2 }
                         : false
                     }
                     activeDot={{
                       r: 6,
-                      fill: '#4338ca',
-                      stroke: '#ffffff',
+                      fill: odoLineStroke,
+                      stroke: dotStrokeSurface,
                       strokeWidth: 2,
                     }}
                   />
@@ -1116,7 +1143,7 @@ export function AnalyticsSection({
               </ResponsiveContainer>
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs text-slate-500">
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400">
               <span className="font-mono tabular-nums">
                 ช่วงเลขไมล์ {formatKm(odometerTrend.minOdometer)} –{' '}
                 {formatKm(odometerTrend.maxOdometer)} กม.
@@ -1133,26 +1160,26 @@ export function AnalyticsSection({
       {/* Monthly Odometer Readings & Driving Habits (Recharts LineChart) */}
       <div
         data-testid="monthly-odometer-chart"
-        className="bg-white border border-slate-200 rounded-xl p-5 sm:p-6 space-y-4"
+        className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 sm:p-6 space-y-4 transition-colors"
       >
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           <div>
-            <h2 className="font-display text-base sm:text-lg font-semibold text-slate-900 flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-teal-700 shrink-0" aria-hidden="true" />
+            <h2 className="font-display text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-teal-700 dark:text-teal-400 shrink-0" aria-hidden="true" />
               <span>กราฟเลขไมล์สะสมรายเดือนและพฤติกรรมการขับขี่</span>
             </h2>
-            <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
               {monthlyOdometer.monthCount > 0 ? (
                 <>
                   ติดตามรายเดือน {monthlyOdometer.monthCount} เดือน · เฉลี่ยวิ่ง{' '}
-                  <strong className="font-mono tabular-nums text-teal-700">
+                  <strong className="font-mono tabular-nums text-teal-700 dark:text-teal-400">
                     ~{formatKm(monthlyOdometer.averageMonthlyDistanceKm)} กม./เดือน
                   </strong>
                   {monthlyOdometer.peakDistanceMonth && (
                     <>
                       {' '}
                       · เดือนขับสูงสุด{' '}
-                      <strong className="font-mono tabular-nums text-amber-700">
+                      <strong className="font-mono tabular-nums text-amber-700 dark:text-amber-400">
                         {monthlyOdometer.peakDistanceMonth.monthLabel} (+
                         {formatKm(monthlyOdometer.peakDistanceMonth.distanceKm)} กม.)
                       </strong>
@@ -1169,7 +1196,7 @@ export function AnalyticsSection({
             <div
               role="group"
               aria-label="รูปแบบข้อมูลกราฟเลขไมล์รายเดือน"
-              className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-lg"
+              className="inline-flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg"
             >
               <button
                 type="button"
@@ -1177,8 +1204,8 @@ export function AnalyticsSection({
                 aria-pressed={monthlyOdoMetric === 'reading'}
                 className={`px-3 py-1.5 min-h-[34px] rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                   monthlyOdoMetric === 'reading'
-                    ? 'bg-white text-slate-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
                 }`}
               >
                 เลขไมล์รายเดือน
@@ -1189,8 +1216,8 @@ export function AnalyticsSection({
                 aria-pressed={monthlyOdoMetric === 'distance'}
                 className={`px-3 py-1.5 min-h-[34px] rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                   monthlyOdoMetric === 'distance'
-                    ? 'bg-white text-slate-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
                 }`}
               >
                 ระยะทางต่อเดือน
@@ -1201,7 +1228,7 @@ export function AnalyticsSection({
               <div
                 role="group"
                 aria-label="จำนวนเดือนที่แสดงในกราฟเลขไมล์รายเดือน"
-                className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-lg"
+                className="inline-flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg"
               >
                 <button
                   type="button"
@@ -1209,8 +1236,8 @@ export function AnalyticsSection({
                   aria-pressed={monthlyOdoWindow === '6m'}
                   className={`px-2.5 py-1.5 min-h-[34px] rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                     monthlyOdoWindow === '6m'
-                      ? 'bg-white text-slate-900 shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
+                      ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
                   }`}
                 >
                   6 เดือน
@@ -1221,8 +1248,8 @@ export function AnalyticsSection({
                   aria-pressed={monthlyOdoWindow === '12m'}
                   className={`px-2.5 py-1.5 min-h-[34px] rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                     monthlyOdoWindow === '12m'
-                      ? 'bg-white text-slate-900 shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
+                      ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
                   }`}
                 >
                   12 เดือน
@@ -1233,8 +1260,8 @@ export function AnalyticsSection({
                   aria-pressed={monthlyOdoWindow === 'all'}
                   className={`px-2.5 py-1.5 min-h-[34px] rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                     monthlyOdoWindow === 'all'
-                      ? 'bg-white text-slate-900 shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
+                      ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
                   }`}
                 >
                   ทั้งหมด
@@ -1245,7 +1272,7 @@ export function AnalyticsSection({
         </div>
 
         {monthlyOdometer.points.length === 0 ? (
-          <div className="h-56 flex items-center justify-center border border-dashed border-slate-200 rounded-lg text-sm text-slate-500">
+          <div className="h-56 flex items-center justify-center border border-dashed border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-500 dark:text-slate-400">
             ยังไม่มีประวัติเลขไมล์รายเดือนสำหรับแสดงกราฟ
           </div>
         ) : (
@@ -1256,11 +1283,11 @@ export function AnalyticsSection({
                   data={monthlyOdometer.points}
                   margin={{ top: 18, right: 24, left: 8, bottom: 4 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridStroke} />
                   <XAxis
                     dataKey="shortLabel"
-                    tick={{ fill: '#475569', fontSize: 11 }}
-                    axisLine={{ stroke: '#cbd5e1' }}
+                    tick={{ fill: primaryTickColor, fontSize: 11 }}
+                    axisLine={{ stroke: axisLineStroke }}
                     tickLine={false}
                     interval={monthlyOdometer.points.length <= 12 ? 0 : 'preserveStartEnd'}
                   />
@@ -1271,25 +1298,25 @@ export function AnalyticsSection({
                         : [0, monthlyDistYMax]
                     }
                     tickFormatter={(val: number) => formatKm(val)}
-                    tick={{ fill: '#64748b', fontSize: 11 }}
+                    tick={{ fill: tickColor, fontSize: 11 }}
                     axisLine={false}
                     tickLine={false}
                     width={64}
                   />
                   <Tooltip
                     content={<CustomMonthlyOdometerTooltip metric={monthlyOdoMetric} />}
-                    cursor={{ stroke: '#94a3b8', strokeDasharray: '3 3' }}
+                    cursor={{ stroke: cursorStroke, strokeDasharray: '3 3' }}
                   />
                   {monthlyOdoMetric === 'distance' &&
                     monthlyOdometer.averageMonthlyDistanceKm > 0 && (
                       <ReferenceLine
                         y={monthlyOdometer.averageMonthlyDistanceKm}
-                        stroke="#64748b"
+                        stroke={refLineStroke}
                         strokeDasharray="4 4"
                         label={{
                           value: `เฉลี่ย ${formatKm(monthlyOdometer.averageMonthlyDistanceKm)} กม.`,
                           position: 'insideTopRight',
-                          fill: '#475569',
+                          fill: refLabelColor,
                           fontSize: 11,
                         }}
                       />
@@ -1302,14 +1329,14 @@ export function AnalyticsSection({
                         ? 'เลขไมล์ปลายเดือน (กม.)'
                         : 'ระยะทางขับขี่รายเดือน (กม.)'
                     }
-                    stroke="#0f766e"
+                    stroke={monthlyOdoStroke}
                     strokeWidth={2.5}
                     animationDuration={200}
-                    dot={<CustomMonthlyOdoDot />}
+                    dot={<CustomMonthlyOdoDot isDark={isDark} />}
                     activeDot={{
                       r: 6,
-                      fill: '#0f766e',
-                      stroke: '#ffffff',
+                      fill: monthlyOdoStroke,
+                      stroke: dotStrokeSurface,
                       strokeWidth: 2,
                     }}
                   />
@@ -1317,11 +1344,11 @@ export function AnalyticsSection({
               </ResponsiveContainer>
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs text-slate-500">
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400">
               <div className="flex flex-wrap items-center gap-4">
                 <span className="inline-flex items-center gap-1.5">
                   <span
-                    className="w-2.5 h-2.5 rounded-full bg-teal-700 shrink-0"
+                    className="w-2.5 h-2.5 rounded-full bg-teal-700 dark:bg-teal-400 shrink-0"
                     aria-hidden="true"
                   />
                   <span>
@@ -1333,7 +1360,7 @@ export function AnalyticsSection({
                 {monthlyOdometer.peakDistanceMonth && (
                   <span className="inline-flex items-center gap-1.5">
                     <span
-                      className="w-2.5 h-2.5 rounded-full bg-amber-600 shrink-0"
+                      className="w-2.5 h-2.5 rounded-full bg-amber-600 dark:bg-amber-500 shrink-0"
                       aria-hidden="true"
                     />
                     <span>
@@ -1342,7 +1369,7 @@ export function AnalyticsSection({
                   </span>
                 )}
               </div>
-              <span className="font-mono tabular-nums text-slate-500">
+              <span className="font-mono tabular-nums text-slate-500 dark:text-slate-400">
                 ระยะทางรวมในช่วง +{formatKm(monthlyOdometer.totalTrackedKm)} กม. · ล่าสุด{' '}
                 {formatKm(monthlyOdometer.latestOdometer)} กม.
               </span>

@@ -106,12 +106,12 @@ function FileTypeIcon({ mimeType }: { mimeType: string }) {
     mimeType === 'application/vnd.google-apps.spreadsheet' ||
     mimeType === 'text/csv'
   ) {
-    return <FileSpreadsheet className="w-4 h-4 text-emerald-700 shrink-0" aria-hidden="true" />;
+    return <FileSpreadsheet className="w-4 h-4 text-emerald-700 dark:text-emerald-400 shrink-0" aria-hidden="true" />;
   }
   if (mimeType.startsWith('image/')) {
-    return <ImageIcon className="w-4 h-4 text-blue-700 shrink-0" aria-hidden="true" />;
+    return <ImageIcon className="w-4 h-4 text-blue-700 dark:text-blue-400 shrink-0" aria-hidden="true" />;
   }
-  return <FileText className="w-4 h-4 text-slate-600 shrink-0" aria-hidden="true" />;
+  return <FileText className="w-4 h-4 text-slate-600 dark:text-slate-400 shrink-0" aria-hidden="true" />;
 }
 
 export function GoogleDriveModal({
@@ -318,7 +318,7 @@ export function GoogleDriveModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/50 backdrop-blur-[1px]"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-[1px]"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -327,19 +327,19 @@ export function GoogleDriveModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="drive-modal-title"
-        className="w-full max-w-2xl bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden flex flex-col max-h-[90vh]"
+        className="w-full max-w-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl overflow-hidden flex flex-col max-h-[90vh]"
       >
-        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between gap-3">
+        <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
-            <HardDrive className="w-5 h-5 text-blue-700 shrink-0" aria-hidden="true" />
+            <HardDrive className="w-5 h-5 text-blue-700 dark:text-blue-400 shrink-0" aria-hidden="true" />
             <div className="min-w-0">
               <h2
                 id="drive-modal-title"
-                className="font-display text-lg font-semibold text-slate-900 truncate"
+                className="font-display text-lg font-semibold text-slate-900 dark:text-slate-100 truncate"
               >
                 ดึงข้อมูลจาก Google Drive
               </h2>
-              <p className="text-xs text-slate-500 truncate">
+              <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
                 เลือกไฟล์ที่อัปโหลดล่าสุด (เช่น ช่วงเวลา 15:24 น.) เพื่อตรวจสอบก่อนอัปเดตลงสมุดบันทึก
               </p>
             </div>
@@ -348,7 +348,7 @@ export function GoogleDriveModal({
             type="button"
             onClick={onClose}
             aria-label="ปิดหน้าต่าง Google Drive"
-            className="p-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 cursor-pointer shrink-0"
+            className="p-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-100 dark:hover:bg-slate-800 cursor-pointer shrink-0"
           >
             <X className="w-4 h-4" aria-hidden="true" />
           </button>
@@ -358,7 +358,7 @@ export function GoogleDriveModal({
           {errorMsg && (
             <div
               role="alert"
-              className="p-3 rounded-lg bg-red-50 border border-red-200 text-xs font-medium text-red-700 flex items-start gap-2"
+              className="p-3 rounded-lg bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 text-xs font-medium text-red-700 dark:text-red-300 flex items-start gap-2"
             >
               <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
               <span>{errorMsg}</span>
@@ -368,7 +368,7 @@ export function GoogleDriveModal({
           {successMsg && (
             <div
               role="status"
-              className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-xs font-medium text-emerald-700 flex items-center justify-between gap-3"
+              className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-xs font-medium text-emerald-700 dark:text-emerald-300 flex items-center justify-between gap-3"
             >
               <span className="inline-flex items-center gap-1.5">
                 <Check className="w-4 h-4 shrink-0" aria-hidden="true" />
@@ -377,7 +377,7 @@ export function GoogleDriveModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="px-2.5 py-1 rounded bg-emerald-700 text-white text-xs font-medium hover:bg-emerald-800 cursor-pointer shrink-0"
+                className="px-2.5 py-1 rounded bg-emerald-700 dark:bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-800 dark:hover:bg-emerald-500 cursor-pointer shrink-0"
               >
                 ดูแดชบอร์ด
               </button>
@@ -385,12 +385,12 @@ export function GoogleDriveModal({
           )}
 
           {!token ? (
-            <div className="border border-slate-200 rounded-xl p-6 text-center space-y-4 bg-slate-50/70">
+            <div className="border border-slate-200 dark:border-slate-700 rounded-xl p-6 text-center space-y-4 bg-slate-50/70 dark:bg-slate-800/50">
               <div className="space-y-1.5 max-w-md mx-auto">
-                <p className="text-sm font-semibold text-slate-900">
+                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                   เชื่อมต่อ Google Drive เพื่อดูไฟล์ล่าสุดของคุณ
                 </p>
-                <p className="text-xs text-slate-600 leading-relaxed">
+                <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
                   ระบบขอสิทธิ์อ่านไฟล์เท่านั้น (Read-only) เพื่อค้นหาไฟล์บันทึกข้อมูล ใบเสร็จ หรือเอกสารที่คุณอัปโหลดไว้ และจะให้คุณยืนยันความถูกต้องก่อนเปลี่ยนแปลงข้อมูลทุกครั้ง
                 </p>
               </div>
@@ -446,30 +446,30 @@ export function GoogleDriveModal({
                 <button
                   type="button"
                   onClick={() => setPendingConfirmation(null)}
-                  className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 cursor-pointer"
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 cursor-pointer"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" />
                   <span>เลือกไฟล์อื่น</span>
                 </button>
-                <span className="text-xs text-slate-500 font-mono tabular-nums">
+                <span className="text-xs text-slate-500 dark:text-slate-400 font-mono tabular-nums">
                   {formatBangkokTimestamp(pendingConfirmation.file.modifiedTime)}
                 </span>
               </div>
 
-              <div className="border border-slate-200 rounded-xl p-4 space-y-3 bg-slate-50/70">
+              <div className="border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-3 bg-slate-50/70 dark:bg-slate-800/50">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-xs font-medium text-slate-500">
+                    <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
                       ตัวอย่างการเปลี่ยนแปลงจากไฟล์: {pendingConfirmation.file.name}
                     </p>
-                    <p className="text-sm font-semibold text-slate-900 mt-1">
+                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 mt-1">
                       {pendingConfirmation.patch.summary}
                     </p>
                   </div>
                 </div>
 
                 {pendingConfirmation.patch.replaceFullState ? (
-                  <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-900">
+                  <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200">
                     ไฟล์นี้เป็นข้อมูลฉบับเต็ม ระบบจะแทนที่ประวัติเดิมด้วยข้อมูลจากไฟล์นี้ทั้งหมด (เลขไมล์{' '}
                     <strong className="font-mono tabular-nums">
                       {formatKm(
@@ -481,11 +481,11 @@ export function GoogleDriveModal({
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
                     {typeof pendingConfirmation.patch.updatedOdometer === 'number' && (
-                      <div className="p-3 rounded-lg bg-white border border-slate-200">
-                        <p className="text-slate-500">เลขไมล์ที่จะอัปเดต</p>
-                        <p className="font-mono text-sm font-semibold text-slate-900 tabular-nums mt-0.5">
+                      <div className="p-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
+                        <p className="text-slate-500 dark:text-slate-400">เลขไมล์ที่จะอัปเดต</p>
+                        <p className="font-mono text-sm font-semibold text-slate-900 dark:text-slate-100 tabular-nums mt-0.5">
                           {formatKm(currentState.vehicle.currentOdometer)} →{' '}
-                          <span className="text-blue-700">
+                          <span className="text-blue-700 dark:text-blue-400">
                             {formatKm(
                               Math.max(
                                 currentState.vehicle.currentOdometer,
@@ -499,11 +499,11 @@ export function GoogleDriveModal({
                     )}
 
                     {typeof pendingConfirmation.patch.updatedFuelPercent === 'number' && (
-                      <div className="p-3 rounded-lg bg-white border border-slate-200">
-                        <p className="text-slate-500">ระดับน้ำมันในถัง</p>
-                        <p className="font-mono text-sm font-semibold text-slate-900 tabular-nums mt-0.5">
+                      <div className="p-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
+                        <p className="text-slate-500 dark:text-slate-400">ระดับน้ำมันในถัง</p>
+                        <p className="font-mono text-sm font-semibold text-slate-900 dark:text-slate-100 tabular-nums mt-0.5">
                           {currentState.vehicle.fuelPercent}% →{' '}
-                          <span className="text-blue-700">
+                          <span className="text-blue-700 dark:text-blue-400">
                             {pendingConfirmation.patch.updatedFuelPercent}%
                           </span>
                         </p>
@@ -514,28 +514,28 @@ export function GoogleDriveModal({
 
                 {pendingConfirmation.patch.newFuelLogs.length > 0 && (
                   <div className="space-y-1.5">
-                    <p className="text-xs font-semibold text-slate-700">
+                    <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                       รายการเติมน้ำมันที่พบ ({pendingConfirmation.patch.newFuelLogs.length}{' '}
                       รายการ)
                     </p>
-                    <ul className="divide-y divide-slate-200 border border-slate-200 rounded-lg bg-white">
+                    <ul className="divide-y divide-slate-200 dark:divide-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900">
                       {pendingConfirmation.patch.newFuelLogs.map((log, idx) => (
                         <li
                           key={`${log.date}-${log.odometer}-${idx}`}
                           className="px-3 py-2 flex items-center justify-between gap-2 text-xs"
                         >
                           <div className="min-w-0">
-                            <p className="font-medium text-slate-900 truncate">{log.note}</p>
-                            <p className="text-slate-500 font-mono tabular-nums">
+                            <p className="font-medium text-slate-900 dark:text-slate-100 truncate">{log.note}</p>
+                            <p className="text-slate-500 dark:text-slate-400 font-mono tabular-nums">
                               {formatThaiDate(log.date, 'short')} · ไมล์{' '}
                               {formatKm(log.odometer)} กม.
                             </p>
                           </div>
                           <div className="text-right font-mono tabular-nums shrink-0">
-                            <p className="font-semibold text-slate-900">
+                            <p className="font-semibold text-slate-900 dark:text-slate-100">
                               {formatBaht(log.amount)} บ.
                             </p>
-                            <p className="text-slate-500">{log.liters.toFixed(2)} ล.</p>
+                            <p className="text-slate-500 dark:text-slate-400">{log.liters.toFixed(2)} ล.</p>
                           </div>
                         </li>
                       ))}
@@ -545,24 +545,24 @@ export function GoogleDriveModal({
 
                 {pendingConfirmation.patch.newServices.length > 0 && (
                   <div className="space-y-1.5">
-                    <p className="text-xs font-semibold text-slate-700">
+                    <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                       รายการซ่อมบำรุงที่พบ ({pendingConfirmation.patch.newServices.length}{' '}
                       รายการ)
                     </p>
-                    <ul className="divide-y divide-slate-200 border border-slate-200 rounded-lg bg-white">
+                    <ul className="divide-y divide-slate-200 dark:divide-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900">
                       {pendingConfirmation.patch.newServices.map((srv, idx) => (
                         <li
                           key={`${srv.date}-${srv.title}-${idx}`}
                           className="px-3 py-2 flex items-center justify-between gap-2 text-xs"
                         >
                           <div className="min-w-0">
-                            <p className="font-medium text-slate-900 truncate">{srv.title}</p>
-                            <p className="text-slate-500 font-mono tabular-nums">
+                            <p className="font-medium text-slate-900 dark:text-slate-100 truncate">{srv.title}</p>
+                            <p className="text-slate-500 dark:text-slate-400 font-mono tabular-nums">
                               {formatThaiDate(srv.date, 'short')} · ไมล์{' '}
                               {formatKm(srv.odometer)} กม.
                             </p>
                           </div>
-                          <p className="font-mono font-semibold text-slate-900 tabular-nums shrink-0">
+                          <p className="font-mono font-semibold text-slate-900 dark:text-slate-100 tabular-nums shrink-0">
                             {formatBaht((srv.partsCost || 0) + (srv.laborCost || 0))} บ.
                           </p>
                         </li>
@@ -577,7 +577,7 @@ export function GoogleDriveModal({
                   type="button"
                   disabled={applying}
                   onClick={() => setPendingConfirmation(null)}
-                  className="px-4 py-2 rounded-lg border border-slate-300 text-xs font-medium text-slate-700 hover:bg-slate-50 cursor-pointer"
+                  className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer"
                 >
                   ยกเลิก
                 </button>
@@ -585,7 +585,7 @@ export function GoogleDriveModal({
                   type="button"
                   disabled={applying}
                   onClick={handleConfirmApply}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-700 hover:bg-blue-800 disabled:opacity-60 text-white text-xs font-medium cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-700 hover:bg-blue-800 dark:bg-blue-600 dark:hover:bg-blue-500 disabled:opacity-60 text-white text-xs font-medium cursor-pointer"
                 >
                   {applying ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
@@ -598,17 +598,17 @@ export function GoogleDriveModal({
             </div>
           ) : (
             <div className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2">
                 <span>
                   เชื่อมต่อแล้ว:{' '}
-                  <strong className="font-medium text-slate-900">
+                  <strong className="font-medium text-slate-900 dark:text-slate-100">
                     {userEmail ?? 'บัญชี Google'}
                   </strong>
                 </span>
                 <button
                   type="button"
                   onClick={handleSignOut}
-                  className="inline-flex items-center gap-1 text-slate-600 hover:text-slate-900 font-medium cursor-pointer"
+                  className="inline-flex items-center gap-1 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white font-medium cursor-pointer"
                 >
                   <LogOut className="w-3.5 h-3.5" aria-hidden="true" />
                   <span>เปลี่ยนบัญชี</span>
@@ -618,7 +618,7 @@ export function GoogleDriveModal({
               <form onSubmit={handleSearchSubmit} className="flex gap-2">
                 <div className="relative flex-1">
                   <Search
-                    className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                    className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
                     aria-hidden="true"
                   />
                   <label htmlFor="drive-search-input" className="sr-only">
@@ -630,13 +630,13 @@ export function GoogleDriveModal({
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="ค้นหาชื่อไฟล์ใน Google Drive..."
-                    className="w-full min-h-[38px] pl-9 pr-3 py-1.5 rounded-lg border border-slate-300 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                    className="w-full min-h-[38px] pl-9 pr-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs text-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-600"
                   />
                 </div>
                 <button
                   type="submit"
                   disabled={loadingFiles}
-                  className="px-3.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 disabled:opacity-60 text-white text-xs font-medium cursor-pointer"
+                  className="px-3.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white dark:text-slate-900 disabled:opacity-60 text-white text-xs font-medium cursor-pointer"
                 >
                   ค้นหา
                 </button>
@@ -645,7 +645,7 @@ export function GoogleDriveModal({
                   disabled={loadingFiles}
                   onClick={() => token && loadFiles(token, searchQuery)}
                   aria-label="รีเฟรชรายการไฟล์"
-                  className="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-medium inline-flex items-center gap-1 cursor-pointer"
+                  className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-medium inline-flex items-center gap-1 cursor-pointer"
                 >
                   <RefreshCw
                     className={`w-3.5 h-3.5 ${loadingFiles ? 'animate-spin' : ''}`}
@@ -656,16 +656,16 @@ export function GoogleDriveModal({
               </form>
 
               {loadingFiles ? (
-                <div className="py-10 text-center text-xs text-slate-500 flex flex-col items-center gap-2">
-                  <Loader2 className="w-5 h-5 animate-spin text-blue-700" aria-hidden="true" />
+                <div className="py-10 text-center text-xs text-slate-500 dark:text-slate-400 flex flex-col items-center gap-2">
+                  <Loader2 className="w-5 h-5 animate-spin text-blue-700 dark:text-blue-400" aria-hidden="true" />
                   <span>กำลังดึงรายการไฟล์ล่าสุดจาก Google Drive...</span>
                 </div>
               ) : files.length === 0 ? (
-                <div className="py-8 text-center text-xs text-slate-500 border border-dashed border-slate-200 rounded-lg">
+                <div className="py-8 text-center text-xs text-slate-500 dark:text-slate-400 border border-dashed border-slate-200 dark:border-slate-700 rounded-lg">
                   ไม่พบไฟล์ที่ตรงกับคำค้นหาใน Google Drive
                 </div>
               ) : (
-                <ul className="divide-y divide-slate-200 border border-slate-200 rounded-xl overflow-hidden">
+                <ul className="divide-y divide-slate-200 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
                   {files.map((file) => {
                     const isToday =
                       getBangkokDateKey(file.modifiedTime) === todayBangkokKey;
@@ -677,28 +677,28 @@ export function GoogleDriveModal({
                     return (
                       <li
                         key={file.id}
-                        className="px-4 py-3 flex items-center justify-between gap-3 hover:bg-slate-50 transition-colors"
+                        className="px-4 py-3 flex items-center justify-between gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors"
                       >
                         <div className="flex items-start gap-3 min-w-0">
                           <div className="mt-0.5">
                             <FileTypeIcon mimeType={file.mimeType} />
                           </div>
                           <div className="min-w-0">
-                            <p className="text-xs sm:text-sm font-medium text-slate-900 truncate">
+                            <p className="text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-100 truncate">
                               {file.name}
                             </p>
-                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-500 mt-0.5">
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
                               <span>{describeMimeLabel(file.mimeType)}</span>
                               <span aria-hidden="true">·</span>
                               <span className="font-mono tabular-nums">
                                 {formatBangkokTimestamp(file.modifiedTime)} น.
                               </span>
                               {isNear1524 ? (
-                                <span className="font-medium text-emerald-700">
+                                <span className="font-medium text-emerald-700 dark:text-emerald-400">
                                   · อัปโหลดช่วง 15:24 น. วันนี้
                                 </span>
                               ) : isToday ? (
-                                <span className="font-medium text-blue-700">
+                                <span className="font-medium text-blue-700 dark:text-blue-400">
                                   · อัปโหลดวันนี้
                                 </span>
                               ) : null}
@@ -710,11 +710,11 @@ export function GoogleDriveModal({
                           type="button"
                           disabled={parsingFileId !== null}
                           onClick={() => handleSelectFile(file)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 disabled:opacity-60 text-xs font-medium text-slate-800 whitespace-nowrap shrink-0 cursor-pointer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-60 text-xs font-medium text-slate-800 dark:text-slate-100 whitespace-nowrap shrink-0 cursor-pointer"
                         >
                           {isParsing && (
                             <Loader2
-                              className="w-3.5 h-3.5 animate-spin text-blue-700"
+                              className="w-3.5 h-3.5 animate-spin text-blue-700 dark:text-blue-400"
                               aria-hidden="true"
                             />
                           )}

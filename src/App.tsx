@@ -87,6 +87,12 @@ import {
 } from './utils/notifications';
 import { apiFetch, ServerUnavailableError } from './utils/serverApi';
 import { mergeSheetsPayloadIntoState } from './utils/sheetsMerge';
+import {
+  applyThemeToBody,
+  resolveInitialTheme,
+  saveThemePreference,
+  type ThemeMode,
+} from './utils/theme';
 import type { TripPlanEstimate } from './utils/tripPlanner';
 
 const STORAGE_KEY = 'ouanpee_triton_dashboard_v3';
@@ -171,6 +177,7 @@ export default function App() {
   );
   const [confirmReset, setConfirmReset] = useState(false);
   const [gmpQuotaExceeded, setGmpQuotaExceeded] = useState(false);
+  const [theme, setTheme] = useState<ThemeMode>(() => resolveInitialTheme());
   const [notificationPrefs, setNotificationPrefs] = useState<NotificationPreferences>(
     () => loadNotificationPreferences()
   );
@@ -273,6 +280,19 @@ export default function App() {
     if (options?.autoPush) {
       void triggerBackgroundGasPush(next);
     }
+  }
+
+  useEffect(() => {
+    applyThemeToBody(theme);
+  }, [theme]);
+
+  function handleToggleTheme() {
+    setTheme((prev) => {
+      const next: ThemeMode = prev === 'dark' ? 'light' : 'dark';
+      saveThemePreference(next);
+      applyThemeToBody(next);
+      return next;
+    });
   }
 
   useEffect(() => {
@@ -1272,11 +1292,11 @@ export default function App() {
   }
 
   return (
-    <div id="top" className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
+    <div id="top" className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-200">
       {gmpQuotaExceeded && (
         <div
           role="alert"
-          className="bg-amber-50 border-b border-amber-200 text-amber-900 px-4 py-2.5 text-xs md:text-sm text-center sticky top-0 z-50 shadow-sm"
+          className="bg-amber-50 dark:bg-amber-950/60 border-b border-amber-200 dark:border-amber-800/70 text-amber-900 dark:text-amber-200 px-4 py-2.5 text-xs md:text-sm text-center sticky top-0 z-50 shadow-sm"
         >
           <span>
             Google Maps Platform quota reached. If you are the app owner, visit{' '}
@@ -1284,7 +1304,7 @@ export default function App() {
               href="https://developers.google.com/maps/ai/ai-studio?utm_campaign=gmp_mcp_codeassist_v1_aistudio#quota_exceeded_errors"
               target="_blank"
               rel="noopener noreferrer"
-              className="underline font-semibold text-amber-950 hover:text-amber-800"
+              className="underline font-semibold text-amber-950 dark:text-amber-100 hover:text-amber-800 dark:hover:text-amber-200"
             >
               maps developer site
             </a>{' '}
@@ -1297,6 +1317,8 @@ export default function App() {
       <TopBar
         activeTab={activeTab}
         onSelectTab={setActiveTab}
+        theme={theme}
+        onToggleTheme={handleToggleTheme}
         onOpenAddFuel={() => {
           setOcrPrefill(null);
           setFuelModalOpen(true);
@@ -1338,8 +1360,8 @@ export default function App() {
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-8">
         {loading ? (
           <div className="space-y-4" aria-busy="true" aria-label="กำลังโหลดข้อมูล">
-            <div className="h-72 bg-white border border-slate-200 rounded-xl animate-pulse" />
-            <div className="h-24 bg-white border border-slate-200 rounded-xl animate-pulse" />
+            <div className="h-72 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl animate-pulse" />
+            <div className="h-24 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl animate-pulse" />
           </div>
         ) : (
           <>
@@ -1375,6 +1397,7 @@ export default function App() {
                   costSummary={costSummary}
                   services={state.services}
                   odometerLogs={state.odometerLogs}
+                  isDark={theme === 'dark'}
                   onEditFuelLog={(log) => {
                     setOcrPrefill(null);
                     setEditingFuelLog(log);
@@ -1382,7 +1405,10 @@ export default function App() {
                   }}
                 />
 
-                <MonthlyMaintenanceChart services={state.services} />
+                <MonthlyMaintenanceChart
+                  services={state.services}
+                  isDark={theme === 'dark'}
+                />
 
                 <ScheduleSection
                   schedules={schedules}
@@ -1420,6 +1446,7 @@ export default function App() {
                   alertThresholdKm={notificationPrefs.thresholdKm}
                   odometerLogs={state.odometerLogs}
                   fuelLogs={state.fuelLogs}
+                  isDark={theme === 'dark'}
                   onTripEstimateChange={setActiveTripEstimate}
                   onAskAiAboutTrip={handleAskAiAboutTrip}
                 />
@@ -1449,6 +1476,7 @@ export default function App() {
                 alertThresholdKm={notificationPrefs.thresholdKm}
                 odometerLogs={state.odometerLogs}
                 fuelLogs={state.fuelLogs}
+                isDark={theme === 'dark'}
                 onTripEstimateChange={setActiveTripEstimate}
                 onAskAiAboutTrip={handleAskAiAboutTrip}
               />
@@ -1461,6 +1489,7 @@ export default function App() {
                   costSummary={costSummary}
                   services={state.services}
                   odometerLogs={state.odometerLogs}
+                  isDark={theme === 'dark'}
                   onEditFuelLog={(log) => {
                     setOcrPrefill(null);
                     setEditingFuelLog(log);
@@ -1490,7 +1519,10 @@ export default function App() {
 
             {activeTab === 'maintenance' && (
               <>
-                <MonthlyMaintenanceChart services={state.services} />
+                <MonthlyMaintenanceChart
+                  services={state.services}
+                  isDark={theme === 'dark'}
+                />
                 <ScheduleSection
                   schedules={schedules}
                   currentOdometer={state.vehicle.currentOdometer}
@@ -1524,8 +1556,8 @@ export default function App() {
         )}
       </main>
 
-      <footer className="border-t border-slate-200 bg-white mt-12">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-slate-500">
+      <footer className="border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 mt-12 transition-colors duration-200">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
           <p>
             สมุดบันทึกอ้วนพี ({state.vehicle.make} {state.vehicle.model} {state.vehicle.engineSpec}) · อัปเดตล่าสุด {formatThaiDate(state.vehicle.lastUpdatedDate, 'full')}
           </p>
@@ -1533,18 +1565,18 @@ export default function App() {
           <div>
             {confirmReset ? (
               <div className="inline-flex items-center gap-2">
-                <span className="text-slate-700 font-medium">คืนค่าข้อมูลต้นฉบับ?</span>
+                <span className="text-slate-700 dark:text-slate-300 font-medium">คืนค่าข้อมูลต้นฉบับ?</span>
                 <button
                   type="button"
                   onClick={handleResetSeed}
-                  className="px-2.5 py-1 rounded bg-slate-900 text-white font-medium hover:bg-slate-800 cursor-pointer"
+                  className="px-2.5 py-1 rounded bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-medium hover:bg-slate-800 dark:hover:bg-white cursor-pointer"
                 >
                   ยืนยัน
                 </button>
                 <button
                   type="button"
                   onClick={() => setConfirmReset(false)}
-                  className="px-2.5 py-1 rounded border border-slate-300 text-slate-700 hover:bg-slate-50 cursor-pointer"
+                  className="px-2.5 py-1 rounded border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
                 >
                   ยกเลิก
                 </button>
@@ -1553,7 +1585,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setConfirmReset(true)}
-                className="inline-flex items-center gap-1.5 text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors cursor-pointer"
               >
                 <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
                 <span>คืนค่าข้อมูลเริ่มต้น</span>

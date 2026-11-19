@@ -103,7 +103,7 @@ export function OcrScannerModal({ isOpen, onClose, onExtracted }: OcrScannerModa
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/50 backdrop-blur-[1px]"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-[1px]"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -112,17 +112,17 @@ export function OcrScannerModal({ isOpen, onClose, onExtracted }: OcrScannerModa
         role="dialog"
         aria-modal="true"
         aria-labelledby="ocr-modal-title"
-        className="w-full max-w-lg bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden flex flex-col max-h-[90vh]"
+        className="w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl overflow-hidden flex flex-col max-h-[90vh]"
       >
-        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
-          <h2 id="ocr-modal-title" className="font-display text-lg font-semibold text-slate-900">
+        <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+          <h2 id="ocr-modal-title" className="font-display text-lg font-semibold text-slate-900 dark:text-slate-100">
             สแกนใบเสร็จน้ำมัน / หน้าปัดไมล์ด้วย AI
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="ปิดหน้าต่างสแกน AI"
-            className="p-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 cursor-pointer"
+            className="p-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-100 dark:hover:bg-slate-800 cursor-pointer"
           >
             <X className="w-4 h-4" aria-hidden="true" />
           </button>
@@ -132,13 +132,13 @@ export function OcrScannerModal({ isOpen, onClose, onExtracted }: OcrScannerModa
           <div className="space-y-2">
             <label
               htmlFor="ocr-image-input"
-              className="block text-xs font-medium text-slate-700"
+              className="block text-xs font-medium text-slate-700 dark:text-slate-300"
             >
               อัปโหลดรูปถ่ายใบเสร็จปั๊มน้ำมัน หรือหน้าปัดเรือนไมล์
             </label>
             <label
               htmlFor="ocr-image-input"
-              className="flex flex-col items-center justify-center w-full h-44 border-2 border-dashed border-slate-300 rounded-xl cursor-pointer bg-slate-50 hover:bg-slate-100/80 transition-colors overflow-hidden"
+              className="flex flex-col items-center justify-center w-full h-44 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl cursor-pointer bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100/80 dark:hover:bg-slate-800 transition-colors overflow-hidden"
             >
               {previewUrl ? (
                 <img
@@ -148,11 +148,11 @@ export function OcrScannerModal({ isOpen, onClose, onExtracted }: OcrScannerModa
                 />
               ) : (
                 <div className="flex flex-col items-center justify-center text-center px-4">
-                  <Camera className="w-8 h-8 text-blue-700 mb-2" aria-hidden="true" />
-                  <p className="text-xs sm:text-sm font-medium text-slate-700">
+                  <Camera className="w-8 h-8 text-blue-700 dark:text-blue-400 mb-2" aria-hidden="true" />
+                  <p className="text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200">
                     คลิกเพื่อเลือกรูปภาพ หรือถ่ายภาพ
                   </p>
-                  <p className="text-xs text-slate-500 mt-0.5">รองรับ JPG, PNG, WEBP</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">รองรับ JPG, PNG, WEBP</p>
                 </div>
               )}
               <input
@@ -170,19 +170,19 @@ export function OcrScannerModal({ isOpen, onClose, onExtracted }: OcrScannerModa
               role={statusMsg.type === 'error' ? 'alert' : 'status'}
               className={`p-3 rounded-lg text-xs font-medium border ${
                 statusMsg.type === 'error'
-                  ? 'bg-red-50 text-red-700 border-red-200'
-                  : 'bg-blue-50 text-blue-800 border-blue-200'
+                  ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/50 dark:text-red-300 dark:border-red-800'
+                  : 'bg-blue-50 text-blue-800 border-blue-200 dark:bg-blue-950/60 dark:text-blue-200 dark:border-blue-800'
               }`}
             >
               {statusMsg.text}
             </p>
           )}
 
-          <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
+          <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
             <button
               type="button"
               onClick={onClose}
-              className="min-h-[40px] px-4 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium cursor-pointer"
+              className="min-h-[40px] px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium cursor-pointer"
             >
               ปิด
             </button>
@@ -190,7 +190,7 @@ export function OcrScannerModal({ isOpen, onClose, onExtracted }: OcrScannerModa
               type="button"
               onClick={handleRunOcr}
               disabled={scanning}
-              className="inline-flex items-center gap-2 min-h-[40px] px-5 py-2 rounded-lg bg-indigo-700 hover:bg-indigo-800 disabled:opacity-60 text-white text-sm font-medium cursor-pointer"
+              className="inline-flex items-center gap-2 min-h-[40px] px-5 py-2 rounded-lg bg-indigo-700 hover:bg-indigo-800 dark:bg-indigo-600 dark:hover:bg-indigo-500 disabled:opacity-60 text-white text-sm font-medium cursor-pointer"
             >
               {scanning ? (
                 <>

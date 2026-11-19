@@ -73,12 +73,12 @@ export function OdometerLogView({
       <div>
         <h2
           id="odometer-view-heading"
-          className="font-display text-xl sm:text-2xl font-semibold text-slate-900"
+          className="font-display text-xl sm:text-2xl font-semibold text-slate-900 dark:text-slate-100"
         >
           บันทึกและประวัติเลขไมล์หน้าปัด
         </h2>
-        <p className="text-sm text-slate-600 mt-0.5">
-          เลขไมล์ล่าสุด <span className="font-mono tabular-nums font-semibold text-slate-900">{formatKm(currentOdometer)} กม.</span> · ใช้สำหรับคำนวณระยะคงเหลือของทุกรายการเซอร์วิส
+        <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">
+          เลขไมล์ล่าสุด <span className="font-mono tabular-nums font-semibold text-slate-900 dark:text-slate-100">{formatKm(currentOdometer)} กม.</span> · ใช้สำหรับคำนวณระยะคงเหลือของทุกรายการเซอร์วิส
         </p>
       </div>
 
@@ -86,15 +86,15 @@ export function OdometerLogView({
         <form
           onSubmit={handleSubmit}
           noValidate
-          className="lg:col-span-5 bg-white border border-slate-200 rounded-xl p-5 sm:p-6 space-y-4"
+          className="lg:col-span-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 sm:p-6 space-y-4 transition-colors"
         >
-          <div className="flex items-center gap-2 text-slate-900">
-            <Gauge className="w-5 h-5 text-blue-700" aria-hidden="true" />
+          <div className="flex items-center gap-2 text-slate-900 dark:text-slate-100">
+            <Gauge className="w-5 h-5 text-blue-700 dark:text-blue-400" aria-hidden="true" />
             <h3 className="text-base font-semibold">บันทึกเลขไมล์ใหม่</h3>
           </div>
 
           <div className="space-y-1.5">
-            <label htmlFor="odo-log-value" className="block text-xs font-medium text-slate-700">
+            <label htmlFor="odo-log-value" className="block text-xs font-medium text-slate-700 dark:text-slate-300">
               เลขไมล์หน้าปัด (กม.)
             </label>
             <input
@@ -106,13 +106,13 @@ export function OdometerLogView({
                 setOdometer(e.target.value);
                 if (errorMsg) setErrorMsg(null);
               }}
-              className="w-full min-h-[42px] px-3 py-2 rounded-lg border border-slate-300 bg-white font-mono text-sm tabular-nums text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+              className="w-full min-h-[42px] px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-mono text-sm tabular-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600"
             />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label htmlFor="odo-log-date" className="block text-xs font-medium text-slate-700">
+              <label htmlFor="odo-log-date" className="block text-xs font-medium text-slate-700 dark:text-slate-300">
                 วันที่บันทึก
               </label>
               <input
@@ -120,19 +120,19 @@ export function OdometerLogView({
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full min-h-[42px] px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                className="w-full min-h-[42px] px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600"
               />
             </div>
 
             <div className="space-y-1.5">
-              <label htmlFor="odo-log-source" className="block text-xs font-medium text-slate-700">
+              <label htmlFor="odo-log-source" className="block text-xs font-medium text-slate-700 dark:text-slate-300">
                 แหล่งข้อมูล
               </label>
               <select
                 id="odo-log-source"
                 value={source}
                 onChange={(e) => setSource(e.target.value)}
-                className="w-full min-h-[42px] px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                className="w-full min-h-[42px] px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600"
               >
                 {SOURCE_OPTIONS.map((opt) => (
                   <option key={opt} value={opt}>
@@ -144,7 +144,7 @@ export function OdometerLogView({
           </div>
 
           <div className="space-y-1.5">
-            <label htmlFor="odo-log-note" className="block text-xs font-medium text-slate-700">
+            <label htmlFor="odo-log-note" className="block text-xs font-medium text-slate-700 dark:text-slate-300">
               หมายเหตุเพิ่มเติม (ถ้ามี)
             </label>
             <input
@@ -153,17 +153,17 @@ export function OdometerLogView({
               value={note}
               onChange={(e) => setNote(e.target.value)}
               placeholder="เช่น เดินทางกลับต่างจังหวัด / เช็กระยะ"
-              className="w-full min-h-[42px] px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+              className="w-full min-h-[42px] px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-600"
             />
           </div>
 
           {errorMsg && (
-            <p role="alert" className="text-xs text-red-600 font-medium">
+            <p role="alert" className="text-xs text-red-600 dark:text-red-400 font-medium">
               {errorMsg}
             </p>
           )}
           {savedMsg && !errorMsg && (
-            <p className="inline-flex items-center gap-1.5 text-xs text-emerald-700 font-medium">
+            <p className="inline-flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-400 font-medium">
               <Check className="w-4 h-4" aria-hidden="true" />
               <span>บันทึกประวัติเลขไมล์เรียบร้อยแล้ว</span>
             </p>
@@ -172,21 +172,21 @@ export function OdometerLogView({
           <button
             type="submit"
             disabled={submitting}
-            className="w-full min-h-[42px] px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 disabled:opacity-60 text-white text-sm font-medium transition-colors cursor-pointer"
+            className="w-full min-h-[42px] px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white disabled:opacity-60 text-white dark:text-slate-900 text-sm font-medium transition-colors cursor-pointer"
           >
             {submitting ? 'กำลังบันทึก...' : 'บันทึกเลขไมล์'}
           </button>
         </form>
 
-        <div className="lg:col-span-7 bg-white border border-slate-200 rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
-            <h3 className="text-base font-semibold text-slate-900">ประวัติการอัปเดตเลขไมล์</h3>
-            <span className="text-xs text-slate-500 font-mono tabular-nums">
+        <div className="lg:col-span-7 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden transition-colors">
+          <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+            <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">ประวัติการอัปเดตเลขไมล์</h3>
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-mono tabular-nums">
               {sortedLogs.length} รายการ
             </span>
           </div>
 
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-slate-100 dark:divide-slate-800">
             {sortedLogs.map((entry, idx) => (
               <div
                 key={entry.id}
@@ -194,19 +194,19 @@ export function OdometerLogView({
               >
                 <div className="space-y-0.5">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-mono tabular-nums text-slate-500">
+                    <span className="text-xs font-mono tabular-nums text-slate-500 dark:text-slate-400">
                       {formatThaiDate(entry.date, 'short')}
                     </span>
-                    <span className="text-slate-300" aria-hidden="true">·</span>
-                    <span className="text-sm font-medium text-slate-900">{entry.source}</span>
+                    <span className="text-slate-300 dark:text-slate-600" aria-hidden="true">·</span>
+                    <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{entry.source}</span>
                     {idx === 0 && (
-                      <span className="text-xs font-medium text-blue-700">· ล่าสุด</span>
+                      <span className="text-xs font-medium text-blue-700 dark:text-blue-400">· ล่าสุด</span>
                     )}
                   </div>
-                  {entry.note && <p className="text-xs text-slate-600">{entry.note}</p>}
+                  {entry.note && <p className="text-xs text-slate-600 dark:text-slate-400">{entry.note}</p>}
                 </div>
 
-                <div className="font-mono text-base font-semibold text-slate-900 tabular-nums whitespace-nowrap">
+                <div className="font-mono text-base font-semibold text-slate-900 dark:text-slate-100 tabular-nums whitespace-nowrap">
                   {formatKm(entry.odometer)} กม.
                 </div>
               </div>

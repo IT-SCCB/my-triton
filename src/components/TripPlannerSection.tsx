@@ -33,7 +33,7 @@ import type {
 } from '../types/maintenance';
 import { formatBaht, formatKm } from '../utils/maintenance';
 import {
-  fetchRouteStationsOsm,
+  fetchRouteStations,
   type RouteStationsApiResponse,
 } from '../utils/clientOsm';
 import {
@@ -269,12 +269,12 @@ export function TripPlannerSection({
     setIsFallbackLocation(fallbackFlag);
 
     try {
-      // ค้นหาตรงจากเบราว์เซอร์ด้วย OpenStreetMap (Overpass + Nominatim + OSRM)
+      // ค้นหาตรงจากเบราว์เซอร์ด้วย OpenStreetMap (ไฟล์ static + Nominatim + OSRM)
       // ไม่ต้องใช้ API key และไม่ต้องมีเซิร์ฟเวอร์หลังบ้าน จึงใช้บน GitHub Pages ได้
       const resolvedDestination =
         destinationQuery.trim() || extractDestinationFromRouteName(routeName);
 
-      const payload = await fetchRouteStationsOsm({
+      const payload = await fetchRouteStations({
         origin,
         destinationQuery: resolvedDestination || undefined,
       });

@@ -1,20 +1,31 @@
 /**
  * ค้นหาปั๊มน้ำมัน + เส้นทางแบบ client-side ล้วนๆ ด้วย OpenStreetMap
- * (Leaflet แสดงแผนที่ / Overpass API ค้นหาปั๊ม / Nominatim หาพิกัดปลายทาง / OSRM คำนวณเส้นทาง)
+ *
+ * - แผนที่: Leaflet + กระเบื้อง OSM
+ * - ปั๊ม: ไฟล์ static JSON ปั๊มทั่วไทย (public/data/thailand-fuel-stations.json
+ *   สกัดจาก Geofabrik Thailand extract วันที่ 19 พ.ย. 2569) กรองในเครื่อง
+ *   ด้วย Haversine — ไม่ยิง Overpass API อีกต่อไป เพราะ Overpass สาธารณะ
+ *   ตอบช้า/โดน 406/429/504 บ่อย (เทส 19 พ.ย. 2569: รอ ~90 วิแล้วได้ 0 แห่ง
+ *   ทั้งพรีวิวและเว็บจริง) แถมโค้ดเดิมกลืนสาเหตุจริงทิ้งหมด
+ * - ปลายทาง: Nominatim / เส้นทาง: OSRM
  *
  * ไม่ต้องใช้ API key, ไม่ต้องผูกบัตร, ไม่ต้องมีเซิร์ฟเวอร์หลังบ้าน —
  * จึงทำงานได้บน GitHub Pages (STATIC_MODE) ที่ apiFetch โยน ServerUnavailableError
  * ทันที ดู src/utils/serverApi.ts
  *
  * ข้อจำกัดที่ต้องรู้:
- * - ปั๊มเล็ก/ปั๊มใหม่บางแห่งอาจไม่มีในข้อมูล OSM และไม่มีราคาน้ำมัน
- * - Overpass/Nominatim/OSRM เป็นบริการสาธารณะฟรี — ยิงเบาๆ ครั้งละ 1 คำขอ
- *   ต่อการค้นหา 1 ครั้ง (along-route รวมหลายจุดเป็นคำขอเดียว) และตั้ง timeout ไว้ทุกคำขอ
- * - Overpass คืนเฉพาะปั๊มที่มีพิกัด (node มี lat/lon, way/relation ใช้ center)
+ * - ข้อมูลปั๊มเป็น snapshot วันที่สกัด (19 พ.ย. 2569) ปั๊มใหม่/ปั๊มที่ปิดไปแล้ว
+ *   หลังวันนั้นอาจไม่ตรง — ต้องสกัดไฟล์ใหม่เป็นระยะ
+ * - ปั๊มเล็กบางแห่งอาจไม่มีในข้อมูล OSM และไม่มีราคาน้ำมัน
+ * - Nominatim/OSRM เป็นบริการสาธารณะฟรี — ยิงเบาๆ ครั้งละ 1 คำขอต่อการค้นหา 1 ครั้ง
  */
 
 import type { GasStationApiItem, LatLngPoint } from './tripPlanner';
-import { decodeEncodedPolyline, haversineDistanceKm } from './tripPlanner';
+import {
+  buildRouteCumulativeDistances,
+  decodeEncodedPolyline,
+  haversineDistanceKm,
+} from './tripPlanner';
 
 export interface RouteStationsApiResponse {
   origin: LatLngPoint;
@@ -30,33 +41,26 @@ export interface RouteStationsApiResponse {
   routeNotice: string | null;
 }
 
-const OVERPASS_ENDPOINTS = [
-  'https://overpass-api.de/api/interpreter',
-  'https://overpass.private.coffee/api/interpreter',
-  'https://overpass.kumi.systems/api/interpreter',
-];
-
 const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search';
 const OSRM_URL = 'https://router.project-osrm.org/route/v1/driving';
+
+/** ไฟล์ข้อมูลปั๊ม static — อยู่ใน public/data/ จึงเสิร์ฟใต้ base path ของแอป
+ *  (fallback '/' ไว้ให้ node:test ใต้ tsx ที่ไม่มี import.meta.env) */
+const STATIONS_JSON_URL = `${import.meta.env?.BASE_URL ?? '/'}data/thailand-fuel-stations.json`;
 
 const NEARBY_RADIUS_METERS = 5000;
 const ROUTE_RADIUS_METERS = 2000;
 const NEARBY_LIMIT = 40;
 const ALONG_ROUTE_LIMIT = 60;
-const MAX_ROUTE_SAMPLES = 8;
-const ROUTE_SAMPLE_SPACING_KM = 10;
+/** เก็บจุดตัวอย่างตามเส้นทางทุก ~2 กม. (เดิม 8 จุดห่างกัน 10 กม. ครอบคลุมแค่ ~70 กม.แรก) */
+const ROUTE_SAMPLE_SPACING_KM = 2;
+const MAX_ROUTE_SAMPLES = 120;
 
-interface OverpassElement {
-  type: 'node' | 'way' | 'relation';
-  id: number;
-  lat?: number;
-  lon?: number;
-  center?: { lat: number; lon: number };
-  tags?: Record<string, string>;
-}
-
-interface OverpassResponse {
-  elements?: OverpassElement[];
+export interface StaticStation {
+  n: string;
+  b: string;
+  lat: number;
+  lon: number;
 }
 
 interface NominatimItem {
@@ -93,70 +97,97 @@ async function fetchJsonWithTimeout(
   try {
     const res = await fetch(url, { ...init, signal: controller.signal });
     if (!res.ok) {
-      throw new Error(errorMessage);
+      // แสดงสาเหตุจริง (status + URL) แทนข้อความตายตัว — เดิมกลืนทิ้งหมด
+      throw new Error(`${errorMessage} (HTTP ${res.status} · ${url})`);
     }
     return (await res.json()) as unknown;
   } catch (err) {
-    if (err instanceof Error && err.message === errorMessage) throw err;
-    throw new Error(errorMessage);
+    if (err instanceof Error && err.message.startsWith(errorMessage)) throw err;
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error(`${errorMessage} (หมดเวลา ${timeoutMs / 1000} วินาที · ${url})`);
+    }
+    throw new Error(`${errorMessage} (${err instanceof Error ? err.message : 'ไม่ทราบสาเหตุ'} · ${url})`);
   } finally {
     clearTimeout(timer);
   }
 }
 
-async function queryOverpass(ql: string): Promise<OverpassElement[]> {
-  let lastError: Error | null = null;
-  for (const endpoint of OVERPASS_ENDPOINTS) {
-    try {
+/* ---------------- static station data ---------------- */
+
+let stationsPromise: Promise<StaticStation[]> | null = null;
+
+/** โหลดไฟล์ปั๊ม static ครั้งเดียวแล้ว cache ไว้ (ล้มเหลวจะโยน error ที่บอกสาเหตุจริง) */
+export function loadThailandStations(): Promise<StaticStation[]> {
+  if (!stationsPromise) {
+    stationsPromise = (async () => {
       const data = (await fetchJsonWithTimeout(
-        endpoint,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: `data=${encodeURIComponent(ql)}`,
-        },
-        20000,
-        'ค้นหาปั๊มน้ำมันไม่สำเร็จ (เซิร์ฟเวอร์ Overpass ไม่ตอบสนอง) กรุณาลองใหม่อีกครั้ง'
-      )) as OverpassResponse;
-      return Array.isArray(data.elements) ? data.elements : [];
-    } catch (err) {
-      lastError = err instanceof Error ? err : new Error('Overpass error');
-    }
+        STATIONS_JSON_URL,
+        {},
+        15000,
+        'โหลดข้อมูลปั๊มน้ำมันไม่สำเร็จ'
+      )) as StaticStation[];
+      if (!Array.isArray(data)) {
+        throw new Error(`โหลดข้อมูลปั๊มน้ำมันไม่สำเร็จ (ไฟล์ไม่ใช่รายการปั๊ม · ${STATIONS_JSON_URL})`);
+      }
+      return data;
+    })().catch((err) => {
+      // โหลดรอบหน้าจะได้ลองใหม่แทนที่จะจำ error เดิมไว้ตลอด
+      stationsPromise = null;
+      throw err;
+    });
   }
-  throw lastError ?? new Error('ค้นหาปั๊มน้ำมันไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
+  return stationsPromise;
 }
 
-export function mapOverpassElementToStation(
-  el: OverpassElement
-): GasStationApiItem | null {
-  const location: LatLngPoint | null =
-    typeof el.lat === 'number' && typeof el.lon === 'number'
-      ? { lat: el.lat, lng: el.lon }
-      : el.center
-        ? { lat: el.center.lat, lng: el.center.lon }
-        : null;
-  if (!location) return null;
+/** ดัชนีตารางกริด (ช่อง ~2.2 กม.) ไว้ค้นปั๊มรอบจุดโดยไม่ต้องสแกนทั้งไฟล์ทุกครั้ง */
+const GRID_CELL_DEG = 0.02;
 
-  const tags = el.tags ?? {};
-  const name =
-    tags.name?.trim() ||
-    tags.brand?.trim() ||
-    tags['brand:en']?.trim() ||
-    'ปั๊มน้ำมัน';
-  const addressParts = [
-    tags['addr:housenumber'],
-    tags['addr:street'],
-    tags['addr:subdistrict'] ?? tags['addr:district'],
-    tags['addr:province'],
-  ]
-    .map((part) => (part ?? '').trim())
-    .filter((part) => part.length > 0);
-  const address = tags['addr:full']?.trim() || addressParts.join(' ');
+export function buildStationIndex(stations: StaticStation[]): Map<string, StaticStation[]> {
+  const index = new Map<string, StaticStation[]>();
+  for (const station of stations) {
+    const key = `${Math.floor(station.lon / GRID_CELL_DEG)},${Math.floor(station.lat / GRID_CELL_DEG)}`;
+    const bucket = index.get(key);
+    if (bucket) bucket.push(station);
+    else index.set(key, [station]);
+  }
+  return index;
+}
 
+function stationsNearPoint(
+  index: Map<string, StaticStation[]>,
+  point: LatLngPoint,
+  radiusMeters: number
+): { station: StaticStation; distanceKm: number }[] {
+  const radiusKm = radiusMeters / 1000;
+  const latSpan = radiusKm / 111;
+  const lonSpan = radiusKm / (111 * Math.max(0.2, Math.cos((point.lat * Math.PI) / 180)));
+  const minCx = Math.floor((point.lng - lonSpan) / GRID_CELL_DEG);
+  const maxCx = Math.floor((point.lng + lonSpan) / GRID_CELL_DEG);
+  const minCy = Math.floor((point.lat - latSpan) / GRID_CELL_DEG);
+  const maxCy = Math.floor((point.lat + latSpan) / GRID_CELL_DEG);
+  const out: { station: StaticStation; distanceKm: number }[] = [];
+  for (let cx = minCx; cx <= maxCx; cx += 1) {
+    for (let cy = minCy; cy <= maxCy; cy += 1) {
+      const bucket = index.get(`${cx},${cy}`);
+      if (!bucket) continue;
+      for (const station of bucket) {
+        const distanceKm = haversineDistanceKm(point, { lat: station.lat, lng: station.lon });
+        if (distanceKm * 1000 <= radiusMeters) {
+          out.push({ station, distanceKm });
+        }
+      }
+    }
+  }
+  return out;
+}
+
+export function mapStaticStationToItem(station: StaticStation): GasStationApiItem {
+  const location: LatLngPoint = { lat: station.lat, lng: station.lon };
+  const name = station.n?.trim() || station.b?.trim() || 'ปั๊มน้ำมัน';
   return {
-    id: `osm-${el.type}-${el.id}`,
+    id: `static-${station.lat.toFixed(5)}-${station.lon.toFixed(5)}`,
     name,
-    address,
+    address: '',
     location,
     rating: null,
     userRatingCount: null,
@@ -181,23 +212,32 @@ export function dedupeStations(stations: GasStationApiItem[]): GasStationApiItem
   return out;
 }
 
+/** ปั๊มรอบจุดจากรายการ static ที่โหลดมาแล้ว (เรียงตามระยะใกล้ไปไกล) — pure, เทสได้โดยไม่ต้อง fetch */
+export function filterNearbyStations(
+  stations: StaticStation[],
+  center: LatLngPoint,
+  radiusMeters: number = NEARBY_RADIUS_METERS,
+  limit: number = NEARBY_LIMIT
+): GasStationApiItem[] {
+  const index = buildStationIndex(stations);
+  return dedupeStations(
+    stationsNearPoint(index, center, radiusMeters)
+      .sort((a, b) => a.distanceKm - b.distanceKm)
+      .slice(0, limit)
+      .map((f) => mapStaticStationToItem(f.station))
+  );
+}
+
+/** ปั๊มรอบจุดเริ่มต้นจากไฟล์ static (เรียงตามระยะใกล้ไปไกล) */
 export async function searchNearbyFuelStations(
   center: LatLngPoint,
   radiusMeters: number = NEARBY_RADIUS_METERS,
   limit: number = NEARBY_LIMIT
 ): Promise<GasStationApiItem[]> {
-  const ql =
-    `[out:json][timeout:20];` +
-    `nwr["amenity"="fuel"](around:${Math.round(radiusMeters)},${center.lat},${center.lng});` +
-    `out center ${limit};`;
-  const elements = await queryOverpass(ql);
-  return dedupeStations(
-    elements
-      .map(mapOverpassElementToStation)
-      .filter((station): station is GasStationApiItem => station !== null)
-  );
+  return filterNearbyStations(await loadThailandStations(), center, radiusMeters, limit);
 }
 
+/** เก็บจุดตัวอย่างตามเส้นทางทุก ~2 กม. ครอบคลุมทั้งเส้นทาง + ปิดท้ายด้วยปลายทางเสมอ */
 export function sampleRoutePoints(
   points: LatLngPoint[],
   maxSamples: number = MAX_ROUTE_SAMPLES,
@@ -212,8 +252,6 @@ export function sampleRoutePoints(
       lastPicked = points[i];
     }
   }
-  // ปิดท้ายด้วยจุดปลายทางเสมอ (ถ้ายังไม่เกินโควตาให้เพิ่ม ถ้าเต็มแล้วให้แทนที่จุดสุดท้าย
-  // เพื่อให้ปั๊มแถวปลายทางไม่หลุดจากการค้นหา)
   const last = points[points.length - 1];
   if (haversineDistanceKm(lastPicked, last) > 0.5) {
     if (samples.length < maxSamples) {
@@ -225,31 +263,54 @@ export function sampleRoutePoints(
   return samples;
 }
 
+/**
+ * ปั๊มตามเส้นทางจากรายการ static ที่โหลดมาแล้ว — ปั๊มที่อยู่ห่างจากจุดตัวอย่างใดๆ
+ * ไม่เกิน radiusMeters ถือว่าอยู่ตามเส้นทาง เรียงตาม กม. ที่ปั๊มอยู่บนเส้นทาง
+ * (pure, เทสได้โดยไม่ต้อง fetch)
+ */
+export function filterAlongRouteStations(
+  stations: StaticStation[],
+  routePoints: LatLngPoint[],
+  radiusMeters: number = ROUTE_RADIUS_METERS,
+  limit: number = ALONG_ROUTE_LIMIT
+): GasStationApiItem[] {
+  const samples = sampleRoutePoints(routePoints);
+  if (samples.length === 0) return [];
+  const index = buildStationIndex(stations);
+  const cumKm = buildRouteCumulativeDistances(samples);
+  const best = new Map<string, { item: GasStationApiItem; routeKm: number }>();
+  samples.forEach((sample, sampleIdx) => {
+    for (const { station } of stationsNearPoint(index, sample, radiusMeters)) {
+      const item = mapStaticStationToItem(station);
+      const prev = best.get(item.id);
+      if (!prev || cumKm[sampleIdx] < prev.routeKm) {
+        best.set(item.id, { item, routeKm: cumKm[sampleIdx] });
+      }
+    }
+  });
+  return dedupeStations(
+    [...best.values()]
+      .sort((a, b) => a.routeKm - b.routeKm)
+      .slice(0, limit)
+      .map((entry) => entry.item)
+  );
+}
+
+/** ปั๊มตามเส้นทางจากไฟล์ static */
 export async function searchFuelAlongRoute(
   routePoints: LatLngPoint[],
   radiusMeters: number = ROUTE_RADIUS_METERS,
   limit: number = ALONG_ROUTE_LIMIT
 ): Promise<GasStationApiItem[]> {
-  const samples = sampleRoutePoints(routePoints);
-  if (samples.length === 0) return [];
-  const clauses = samples
-    .map(
-      (point) =>
-        `nwr["amenity"="fuel"](around:${Math.round(radiusMeters)},${point.lat},${point.lng});`
-    )
-    .join('');
-  const ql = `[out:json][timeout:20];(${clauses});out center ${limit};`;
-  const elements = await queryOverpass(ql);
-  return dedupeStations(
-    elements
-      .map(mapOverpassElementToStation)
-      .filter((station): station is GasStationApiItem => station !== null)
+  return filterAlongRouteStations(
+    await loadThailandStations(),
+    routePoints,
+    radiusMeters,
+    limit
   );
 }
 
-export async function geocodePlace(
-  query: string
-): Promise<LatLngPoint | null> {
+export async function geocodePlace(query: string): Promise<LatLngPoint | null> {
   const url =
     `${NOMINATIM_URL}?format=json&limit=1&countrycodes=th` +
     `&q=${encodeURIComponent(query.trim())}`;
@@ -257,7 +318,7 @@ export async function geocodePlace(
     url,
     { headers: { 'Accept-Language': 'th' } },
     10000,
-    'ค้นหาตำแหน่งปลายทางไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'
+    'ค้นหาตำแหน่งปลายทางไม่สำเร็จ'
   )) as NominatimItem[];
   if (!Array.isArray(data) || data.length === 0) return null;
   const lat = Number(data[0].lat);
@@ -282,11 +343,11 @@ export async function fetchOsrmRoute(
     url,
     {},
     15000,
-    'คำนวณเส้นทางไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'
+    'คำนวณเส้นทางไม่สำเร็จ'
   )) as OsrmResponse;
   const route = data.routes?.[0];
   if (!route || !route.geometry) {
-    throw new Error('คำนวณเส้นทางไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
+    throw new Error(`คำนวณเส้นทางไม่สำเร็จ (OSRM ไม่คืนเส้นทาง · ${url})`);
   }
   return {
     distanceMeters: route.distance,
@@ -297,34 +358,38 @@ export async function fetchOsrmRoute(
 }
 
 /**
- * ค้นหาปั๊มรอบจุดเริ่มต้น + ปั๊มตามเส้นทางไปปลายทาง แล้วคืนข้อมูลในรูปเดียวกับ
- * ที่เซิร์ฟเวอร์ /api/maps/route-stations เคยคืน (ดู RouteStationsApiResponse)
- * เพื่อให้ TripStationsMapPanel ใช้ต่อได้โดยไม่ต้องแก้
+ * ค้นหาปั๊มรอบจุดเริ่มต้น + ปั๊มตามเส้นทางไปปลายทาง จากไฟล์ static ในเครื่อง
+ * คืนข้อมูลในรูปเดียวกับที่เซิร์ฟเวอร์ /api/maps/route-stations เคยคืน
+ * (ดู RouteStationsApiResponse) เพื่อให้ TripStationsMapPanel ใช้ต่อได้โดยไม่ต้องแก้
+ *
+ * ไม่โยน error เมื่อหาปั๊มไม่เจอ — คืนรายการว่าง + routeNotice ให้แผงแสดงแผนที่
+ * กับป้ายเตือนแทนการซ่อนทั้งแผง (แผนที่กับเส้นทางไม่พึ่งข้อมูลปั๊ม)
+ * โยน error ก็ต่อเมื่อโหลดไฟล์ปั๊มไม่ได้เลย โดยบอกสาเหตุจริง (HTTP status + URL)
  */
-export async function fetchRouteStationsOsm(params: {
+export async function fetchRouteStations(params: {
   origin: LatLngPoint;
   destinationQuery?: string;
 }): Promise<RouteStationsApiResponse> {
   const { origin } = params;
   const destinationQuery = (params.destinationQuery ?? '').trim();
 
-  let nearbyStations: GasStationApiItem[] = [];
-  let nearbyFailed = false;
-  try {
-    nearbyStations = await searchNearbyFuelStations(origin);
-  } catch {
-    nearbyFailed = true;
-  }
+  // โหลดไฟล์ปั๊มก่อน — ถ้าไฟล์โหลดไม่ได้ ให้ error นี้เด้งขึ้นไปบอกผู้ใช้ตรงๆ
+  const stations = await loadThailandStations();
+
+  const nearbyStations = filterNearbyStations(stations, origin);
 
   let route: RouteStationsApiResponse['route'] = null;
   let alongRouteStations: GasStationApiItem[] = [];
   let routeNotice: string | null = null;
 
   if (destinationQuery) {
-    const destination = await geocodePlace(destinationQuery).catch(() => null);
-    if (!destination) {
-      routeNotice = 'หาตำแหน่งปลายทางไม่เจอ แสดงปั๊มใกล้จุดเริ่มต้นแทน';
-    } else {
+    let destination: LatLngPoint | null = null;
+    try {
+      destination = await geocodePlace(destinationQuery);
+    } catch (err) {
+      routeNotice = `หาตำแหน่งปลายทางไม่เจอ (${err instanceof Error ? err.message : 'ไม่ทราบสาเหตุ'}) แสดงปั๊มใกล้จุดเริ่มต้นแทน`;
+    }
+    if (destination) {
       try {
         const osrm = await fetchOsrmRoute(origin, destination);
         route = {
@@ -334,21 +399,17 @@ export async function fetchRouteStationsOsm(params: {
           startLocation: origin,
           endLocation: destination,
         };
-        alongRouteStations = await searchFuelAlongRoute(osrm.points).catch(() => []);
-      } catch {
-        routeNotice = 'คำนวณเส้นทางไม่สำเร็จ แสดงปั๊มใกล้จุดเริ่มต้นแทน';
+        alongRouteStations = filterAlongRouteStations(stations, osrm.points);
+      } catch (err) {
+        routeNotice = `คำนวณเส้นทางไม่สำเร็จ (${err instanceof Error ? err.message : 'ไม่ทราบสาเหตุ'}) แสดงปั๊มใกล้จุดเริ่มต้นแทน`;
       }
+    } else if (!routeNotice) {
+      routeNotice = 'หาตำแหน่งปลายทางไม่เจอ แสดงปั๊มใกล้จุดเริ่มต้นแทน';
     }
   }
 
-  if (nearbyFailed && alongRouteStations.length > 0 && !routeNotice) {
-    routeNotice = 'ค้นหาปั๊มใกล้จุดเริ่มต้นไม่สำเร็จ แสดงปั๊มตามเส้นทางแทน';
-  }
-
-  if (nearbyStations.length === 0 && alongRouteStations.length === 0) {
-    throw new Error(
-      'ค้นหาปั๊มน้ำมันไม่สำเร็จ กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ตแล้วลองใหม่อีกครั้ง'
-    );
+  if (nearbyStations.length === 0 && alongRouteStations.length === 0 && !routeNotice) {
+    routeNotice = 'ไม่พบปั๊มน้ำมันในบริเวณที่ค้นหา (ข้อมูลปั๊มในไฟล์ static วันที่ 19 พ.ย. 2569)';
   }
 
   return { origin, route, alongRouteStations, nearbyStations, routeNotice };

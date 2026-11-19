@@ -146,7 +146,7 @@ export function ServiceFormModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/50 backdrop-blur-[1px]"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-[1px]"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -155,17 +155,17 @@ export function ServiceFormModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="service-modal-title"
-        className="w-full max-w-xl bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden max-h-[90vh] flex flex-col"
+        className="w-full max-w-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl overflow-hidden max-h-[90vh] flex flex-col"
       >
-        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between gap-4">
-          <h2 id="service-modal-title" className="font-display text-lg font-semibold text-slate-900">
+        <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4">
+          <h2 id="service-modal-title" className="font-display text-lg font-semibold text-slate-900 dark:text-slate-100">
             {editingService ? 'แก้ไขรายการเซอร์วิส' : 'บันทึกรายการเซอร์วิสใหม่'}
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="ปิดหน้าต่าง"
-            className="p-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 cursor-pointer"
+            className="p-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-100 dark:hover:bg-slate-800 cursor-pointer"
           >
             <X className="w-4 h-4" aria-hidden="true" />
           </button>
@@ -173,7 +173,7 @@ export function ServiceFormModal({
 
         <form onSubmit={handleFormSubmit} noValidate className="p-5 space-y-4 overflow-y-auto">
           <div className="space-y-1.5">
-            <label htmlFor="srv-title" className="block text-xs font-medium text-slate-700">
+            <label htmlFor="srv-title" className="block text-xs font-medium text-slate-700 dark:text-slate-300">
               รายการเซอร์วิส / อะไหล่ที่เปลี่ยน *
             </label>
             <input
@@ -182,13 +182,13 @@ export function ServiceFormModal({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="เช่น เปลี่ยนถ่ายน้ำมันเครื่อง / ผ้าเบรกหน้า"
-              className="w-full min-h-[42px] px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+              className="w-full min-h-[42px] px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm text-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-600"
             />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label htmlFor="srv-date" className="block text-xs font-medium text-slate-700">
+              <label htmlFor="srv-date" className="block text-xs font-medium text-slate-700 dark:text-slate-300">
                 วันที่ทำเซอร์วิส *
               </label>
               <input
@@ -196,12 +196,12 @@ export function ServiceFormModal({
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full min-h-[42px] px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                className="w-full min-h-[42px] px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600"
               />
             </div>
 
             <div className="space-y-1.5">
-              <label htmlFor="srv-odometer" className="block text-xs font-medium text-slate-700">
+              <label htmlFor="srv-odometer" className="block text-xs font-medium text-slate-700 dark:text-slate-300">
                 เลขไมล์ตอนทำเซอร์วิส (กม.) *
               </label>
               <input
@@ -210,21 +210,21 @@ export function ServiceFormModal({
                 inputMode="numeric"
                 value={odometer}
                 onChange={(e) => setOdometer(e.target.value)}
-                className="w-full min-h-[42px] px-3 py-2 rounded-lg border border-slate-300 bg-white font-mono text-sm tabular-nums text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                className="w-full min-h-[42px] px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-mono text-sm tabular-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label htmlFor="srv-category" className="block text-xs font-medium text-slate-700">
+              <label htmlFor="srv-category" className="block text-xs font-medium text-slate-700 dark:text-slate-300">
                 หมวดหมู่
               </label>
               <select
                 id="srv-category"
                 value={category}
                 onChange={(e) => setCategory(e.target.value as ServiceCategory)}
-                className="w-full min-h-[42px] px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                className="w-full min-h-[42px] px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600"
               >
                 {(Object.keys(CATEGORY_LABELS) as ServiceCategory[]).map((cat) => (
                   <option key={cat} value={cat}>
@@ -235,14 +235,14 @@ export function ServiceFormModal({
             </div>
 
             <div className="space-y-1.5">
-              <label htmlFor="srv-schedule-key" className="block text-xs font-medium text-slate-700">
+              <label htmlFor="srv-schedule-key" className="block text-xs font-medium text-slate-700 dark:text-slate-300">
                 อัปเดตกำหนดการรอบถัดไป
               </label>
               <select
                 id="srv-schedule-key"
                 value={scheduleKey}
                 onChange={(e) => setScheduleKey(e.target.value as ScheduleKey | '')}
-                className="w-full min-h-[42px] px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                className="w-full min-h-[42px] px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600"
               >
                 {SCHEDULE_KEY_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value}>
@@ -255,7 +255,7 @@ export function ServiceFormModal({
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="space-y-1.5">
-              <label htmlFor="srv-parts" className="block text-xs font-medium text-slate-700">
+              <label htmlFor="srv-parts" className="block text-xs font-medium text-slate-700 dark:text-slate-300">
                 ค่าอะไหล่ (บาท)
               </label>
               <input
@@ -264,12 +264,12 @@ export function ServiceFormModal({
                 min="0"
                 value={partsCost}
                 onChange={(e) => setPartsCost(e.target.value)}
-                className="w-full min-h-[42px] px-3 py-2 rounded-lg border border-slate-300 bg-white font-mono text-sm tabular-nums text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                className="w-full min-h-[42px] px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-mono text-sm tabular-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600"
               />
             </div>
 
             <div className="space-y-1.5">
-              <label htmlFor="srv-labor" className="block text-xs font-medium text-slate-700">
+              <label htmlFor="srv-labor" className="block text-xs font-medium text-slate-700 dark:text-slate-300">
                 ค่าแรง (บาท)
               </label>
               <input
@@ -278,12 +278,12 @@ export function ServiceFormModal({
                 min="0"
                 value={laborCost}
                 onChange={(e) => setLaborCost(e.target.value)}
-                className="w-full min-h-[42px] px-3 py-2 rounded-lg border border-slate-300 bg-white font-mono text-sm tabular-nums text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                className="w-full min-h-[42px] px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-mono text-sm tabular-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600"
               />
             </div>
 
             <div className="space-y-1.5">
-              <label htmlFor="srv-interval" className="block text-xs font-medium text-slate-700">
+              <label htmlFor="srv-interval" className="block text-xs font-medium text-slate-700 dark:text-slate-300">
                 ระยะรอบถัดไป (กม.)
               </label>
               <input
@@ -293,13 +293,13 @@ export function ServiceFormModal({
                 value={intervalKm}
                 onChange={(e) => setIntervalKm(e.target.value)}
                 placeholder="เช่น 10000"
-                className="w-full min-h-[42px] px-3 py-2 rounded-lg border border-slate-300 bg-white font-mono text-sm tabular-nums text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                className="w-full min-h-[42px] px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-mono text-sm tabular-nums text-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-600"
               />
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <label htmlFor="srv-notes" className="block text-xs font-medium text-slate-700">
+            <label htmlFor="srv-notes" className="block text-xs font-medium text-slate-700 dark:text-slate-300">
               รายละเอียด / หมายเหตุ
             </label>
             <textarea
@@ -308,13 +308,13 @@ export function ServiceFormModal({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="เช่น เบอร์น้ำมันเครื่อง อู่ที่ทำ หรือรายการตรวจเช็กเพิ่มเติม"
-              className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+              className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm text-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-600"
             />
           </div>
 
           {editingService && (
             <div className="space-y-1.5">
-              <label htmlFor="srv-revision" className="block text-xs font-medium text-slate-700">
+              <label htmlFor="srv-revision" className="block text-xs font-medium text-slate-700 dark:text-slate-300">
                 บันทึกประวัติการแก้ไขตัวเลข (ถ้ามี)
               </label>
               <input
@@ -323,29 +323,29 @@ export function ServiceFormModal({
                 value={revisionNote}
                 onChange={(e) => setRevisionNote(e.target.value)}
                 placeholder="เช่น แก้ไขเลขไมล์จาก ..."
-                className="w-full min-h-[40px] px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                className="w-full min-h-[40px] px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm text-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-600"
               />
             </div>
           )}
 
           {errorMsg && (
-            <p role="alert" className="text-xs text-red-600 font-medium">
+            <p role="alert" className="text-xs text-red-600 dark:text-red-400 font-medium">
               {errorMsg}
             </p>
           )}
 
-          <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
+          <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
             <button
               type="button"
               onClick={onClose}
-              className="min-h-[40px] px-4 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium cursor-pointer"
+              className="min-h-[40px] px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium cursor-pointer"
             >
               ยกเลิก
             </button>
             <button
               type="submit"
               disabled={submitting}
-              className="min-h-[40px] px-5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 disabled:opacity-60 text-white text-sm font-medium cursor-pointer"
+              className="min-h-[40px] px-5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white dark:text-slate-900 disabled:opacity-60 text-white text-sm font-medium cursor-pointer"
             >
               {submitting ? 'กำลังบันทึก...' : editingService ? 'บันทึกการแก้ไข' : 'บันทึกรายการ'}
             </button>

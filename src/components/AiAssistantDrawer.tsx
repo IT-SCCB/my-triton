@@ -716,7 +716,7 @@ export function AiAssistantDrawer({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex justify-end bg-slate-950/45 backdrop-blur-[1px]"
+      className="fixed inset-0 z-50 flex justify-end bg-slate-950/55 backdrop-blur-[1px]"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -726,22 +726,22 @@ export function AiAssistantDrawer({
         aria-modal="true"
         aria-labelledby="ai-drawer-title"
         data-testid="ai-assistant-drawer"
-        className="w-full max-w-xl bg-white h-full border-l border-slate-200 shadow-2xl flex flex-col"
+        className="w-full max-w-xl bg-white dark:bg-slate-900 h-full border-l border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col"
       >
         {/* Header */}
-        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between gap-3 shrink-0">
+        <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-9 h-9 rounded-lg bg-slate-900 text-white flex items-center justify-center shrink-0">
-              <Sparkles className="w-4 h-4 text-blue-300" aria-hidden="true" />
+            <div className="w-9 h-9 rounded-lg bg-slate-900 dark:bg-slate-800 dark:border dark:border-slate-700 text-white flex items-center justify-center shrink-0">
+              <Sparkles className="w-4 h-4 text-blue-300 dark:text-blue-400" aria-hidden="true" />
             </div>
             <div className="min-w-0">
               <h2
                 id="ai-drawer-title"
-                className="font-display text-base sm:text-lg font-semibold text-slate-900 truncate"
+                className="font-display text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100 truncate"
               >
                 ผู้ช่วย AI ประจำรถอ้วนพี
               </h2>
-              <p className="text-xs text-slate-500 truncate font-mono tabular-nums">
+              <p className="text-xs text-slate-500 dark:text-slate-400 truncate font-mono tabular-nums">
                 ไมล์ {vehicle.currentOdometer.toLocaleString('th-TH')} กม. · เฉลี่ย {fuelStats.avgKml.toFixed(2)} กม./ล.
               </p>
             </div>
@@ -751,18 +751,18 @@ export function AiAssistantDrawer({
             type="button"
             onClick={onClose}
             aria-label="ปิดหน้าต่างผู้ช่วย AI"
-            className="p-2 min-w-[40px] min-h-[40px] inline-flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 cursor-pointer"
+            className="p-2 min-w-[40px] min-h-[40px] inline-flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-100 dark:hover:bg-slate-800 cursor-pointer"
           >
             <X className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
 
         {/* Mode Switcher */}
-        <div className="px-5 py-2.5 border-b border-slate-200 bg-slate-50 flex items-center justify-between gap-3 shrink-0">
+        <div className="px-5 py-2.5 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/70 flex items-center justify-between gap-3 shrink-0">
           <div
             role="tablist"
             aria-label="เลือกโหมดผู้ช่วย AI"
-            className="grid grid-cols-2 gap-1 p-1 bg-slate-200/75 rounded-lg"
+            className="grid grid-cols-2 gap-1 p-1 bg-slate-200/75 dark:bg-slate-800 rounded-lg"
           >
             <button
               type="button"
@@ -772,8 +772,8 @@ export function AiAssistantDrawer({
               data-testid="ai-tab-chat"
               className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap cursor-pointer ${
                 mode === 'chat'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white text-slate-900 shadow-xs dark:bg-slate-700 dark:text-slate-100'
+                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
               }`}
             >
               <MessageSquare className="w-3.5 h-3.5" aria-hidden="true" />
@@ -787,8 +787,8 @@ export function AiAssistantDrawer({
               data-testid="ai-tab-voice"
               className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap cursor-pointer ${
                 mode === 'voice'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white text-slate-900 shadow-xs dark:bg-slate-700 dark:text-slate-100'
+                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
               }`}
             >
               <AudioLines className="w-3.5 h-3.5" aria-hidden="true" />
@@ -805,7 +805,7 @@ export function AiAssistantDrawer({
                 id="ai-model-select"
                 value={modelMode}
                 onChange={(e) => setModelMode(e.target.value as 'standard' | 'fast')}
-                className="min-h-[32px] px-2 py-1 rounded-md border border-slate-300 bg-white text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                className="min-h-[32px] px-2 py-1 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600"
               >
                 <option value="standard">Gemini 4 (มาตรฐาน)</option>
                 <option value="fast">Flash Lite (ตอบไว)</option>
@@ -818,7 +818,7 @@ export function AiAssistantDrawer({
                 }}
                 aria-label="ล้างประวัติแชท"
                 title="ล้างประวัติแชท"
-                className="p-1.5 rounded-md border border-slate-200 bg-white text-slate-500 hover:text-slate-900 hover:bg-slate-100 cursor-pointer"
+                className="p-1.5 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-100 dark:hover:bg-slate-800 cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
               </button>
@@ -831,7 +831,7 @@ export function AiAssistantDrawer({
           <>
             <div
               ref={chatScrollRef}
-              className="flex-1 overflow-y-auto p-5 space-y-4 bg-slate-50/40"
+              className="flex-1 overflow-y-auto p-5 space-y-4 bg-slate-50/40 dark:bg-slate-950/60"
             >
               {messages.map((msg) => {
                 const isUser = msg.role === 'user';
@@ -843,25 +843,25 @@ export function AiAssistantDrawer({
                     <div
                       className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
                         isUser
-                          ? 'bg-blue-700 text-white'
-                          : 'bg-white border border-slate-200 text-slate-700'
+                          ? 'bg-blue-700 dark:bg-blue-600 text-white'
+                          : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200'
                       }`}
                     >
                       {isUser ? (
                         <UserIcon className="w-3.5 h-3.5" aria-hidden="true" />
                       ) : (
-                        <Bot className="w-3.5 h-3.5 text-blue-700" aria-hidden="true" />
+                        <Bot className="w-3.5 h-3.5 text-blue-700 dark:text-blue-400" aria-hidden="true" />
                       )}
                     </div>
                     <div
                       className={`max-w-[84%] rounded-xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${
                         isUser
-                          ? 'bg-blue-700 text-white'
-                          : 'bg-white border border-slate-200 text-slate-800'
+                          ? 'bg-blue-700 dark:bg-blue-600 text-white'
+                          : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100'
                       }`}
                     >
                       {msg.text || (
-                        <span className="inline-flex items-center gap-1.5 text-xs text-slate-400">
+                        <span className="inline-flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-400">
                           <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
                           กำลังพิมพ์คำตอบ...
                         </span>
@@ -873,14 +873,14 @@ export function AiAssistantDrawer({
 
               {messages.length <= 2 && !chatStreaming && (
                 <div className="pt-2 space-y-2">
-                  <p className="text-[11px] font-medium text-slate-500">คำถามแนะนำ:</p>
+                  <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">คำถามแนะนำ:</p>
                   <div className="flex flex-col gap-1.5">
                     {QUICK_PROMPTS.map((prompt) => (
                       <button
                         key={prompt}
                         type="button"
                         onClick={() => void sendChatMessage(prompt)}
-                        className="text-left px-3 py-2 rounded-lg border border-slate-200 bg-white hover:bg-blue-50 hover:border-blue-200 text-xs text-slate-700 transition-colors cursor-pointer"
+                        className="text-left px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-blue-950/60 hover:border-blue-200 dark:hover:border-blue-800 text-xs text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
                       >
                         {prompt}
                       </button>
@@ -892,7 +892,7 @@ export function AiAssistantDrawer({
               {chatError && (
                 <div
                   role="alert"
-                  className="p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-800"
+                  className="p-3 rounded-lg bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 text-xs text-red-800 dark:text-red-300"
                 >
                   {chatError}
                 </div>
@@ -901,7 +901,7 @@ export function AiAssistantDrawer({
 
             <form
               onSubmit={handleChatSubmit}
-              className="p-4 border-t border-slate-200 bg-white flex items-end gap-2 shrink-0"
+              className="p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-end gap-2 shrink-0"
             >
               <label htmlFor="ai-chat-input" className="sr-only">
                 พิมพ์คำถามถึงผู้ช่วย AI
@@ -919,13 +919,13 @@ export function AiAssistantDrawer({
                 }}
                 placeholder="ถามเรื่องค่าน้ำมัน เส้นทาง รอบเปลี่ยนอะไหล่ หรืออาการรถ..."
                 data-testid="ai-chat-input"
-                className="flex-1 px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-900 resize-none focus:outline-none focus:ring-2 focus:ring-blue-600"
+                className="flex-1 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm text-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 resize-none focus:outline-none focus:ring-2 focus:ring-blue-600"
               />
               <button
                 type="submit"
                 disabled={chatStreaming || !chatInput.trim()}
                 data-testid="ai-chat-send-btn"
-                className="inline-flex items-center justify-center gap-1.5 min-w-[44px] min-h-[44px] px-4 rounded-lg bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white text-sm font-medium transition-colors shrink-0 cursor-pointer"
+                className="inline-flex items-center justify-center gap-1.5 min-w-[44px] min-h-[44px] px-4 rounded-lg bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white dark:text-slate-900 disabled:opacity-50 text-white text-sm font-medium transition-colors shrink-0 cursor-pointer"
               >
                 {chatStreaming ? (
                   <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
@@ -938,22 +938,22 @@ export function AiAssistantDrawer({
           </>
         ) : (
           /* Real-Time Voice Live Mode */
-          <div className="flex-1 flex flex-col overflow-hidden bg-slate-50/40">
-            <div className="p-5 border-b border-slate-200 bg-white space-y-4 shrink-0">
+          <div className="flex-1 flex flex-col overflow-hidden bg-slate-50/40 dark:bg-slate-950/60">
+            <div className="p-5 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-4 shrink-0">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
-                    <Volume2 className="w-4 h-4 text-blue-700" aria-hidden="true" />
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                    <Volume2 className="w-4 h-4 text-blue-700 dark:text-blue-400" aria-hidden="true" />
                     <span>สนทนาด้วยเสียงแบบเรียลไทม์ (Gemini Live)</span>
                   </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                     พูดคุยโต้ตอบเรื่องทริป ค่าน้ำมัน และรอบซ่อมบำรุงได้ทันทีโดยไม่ต้องพิมพ์
                   </p>
                 </div>
 
                 {voiceStatus === 'live' && (
-                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 font-mono shrink-0">
-                    <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
+                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400 font-mono shrink-0">
+                    <span className="w-2 h-2 rounded-full bg-emerald-600 dark:bg-emerald-400 animate-pulse" />
                     LIVE
                   </span>
                 )}
@@ -965,7 +965,7 @@ export function AiAssistantDrawer({
                     type="button"
                     onClick={() => void startVoiceSession()}
                     data-testid="voice-start-btn"
-                    className="inline-flex items-center justify-center gap-2 min-h-[42px] px-5 py-2 rounded-lg bg-blue-700 hover:bg-blue-800 text-white text-sm font-medium transition-colors cursor-pointer"
+                    className="inline-flex items-center justify-center gap-2 min-h-[42px] px-5 py-2 rounded-lg bg-blue-700 hover:bg-blue-800 dark:bg-blue-600 dark:hover:bg-blue-500 text-white text-sm font-medium transition-colors cursor-pointer"
                   >
                     <Mic className="w-4 h-4" aria-hidden="true" />
                     <span>เริ่มคุยด้วยเสียงสด</span>
@@ -974,7 +974,7 @@ export function AiAssistantDrawer({
                   <button
                     type="button"
                     disabled
-                    className="inline-flex items-center justify-center gap-2 min-h-[42px] px-5 py-2 rounded-lg bg-slate-200 text-slate-700 text-sm font-medium"
+                    className="inline-flex items-center justify-center gap-2 min-h-[42px] px-5 py-2 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-medium"
                   >
                     <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
                     <span>กำลังเชื่อมต่อไมโครโฟนและ Gemini Live...</span>
@@ -987,18 +987,18 @@ export function AiAssistantDrawer({
                       data-testid="voice-mute-btn"
                       className={`inline-flex items-center justify-center gap-1.5 min-h-[42px] px-4 py-2 rounded-lg border text-sm font-medium transition-colors cursor-pointer ${
                         isMuted
-                          ? 'border-amber-300 bg-amber-50 text-amber-900'
-                          : 'border-slate-300 bg-white hover:bg-slate-50 text-slate-800'
+                          ? 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-200'
+                          : 'border-slate-300 bg-white hover:bg-slate-50 text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-100'
                       }`}
                     >
                       {isMuted ? (
                         <>
-                          <MicOff className="w-4 h-4 text-amber-700" aria-hidden="true" />
+                          <MicOff className="w-4 h-4 text-amber-700 dark:text-amber-400" aria-hidden="true" />
                           <span>เปิดไมค์</span>
                         </>
                       ) : (
                         <>
-                          <Mic className="w-4 h-4 text-emerald-700" aria-hidden="true" />
+                          <Mic className="w-4 h-4 text-emerald-700 dark:text-emerald-400" aria-hidden="true" />
                           <span>{isModelSpeaking ? 'กำลังตอบ (พูดแทรกได้)' : 'กำลังฟัง...'}</span>
                         </>
                       )}
@@ -1020,7 +1020,7 @@ export function AiAssistantDrawer({
               {voiceError && (
                 <div
                   role="alert"
-                  className="p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-800"
+                  className="p-3 rounded-lg bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 text-xs text-red-800 dark:text-red-300"
                 >
                   {voiceError}
                 </div>
@@ -1030,12 +1030,12 @@ export function AiAssistantDrawer({
             {/* Live Transcript Feed */}
             <div ref={voiceScrollRef} className="flex-1 overflow-y-auto p-5 space-y-3">
               {voiceTranscripts.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-center px-6 py-8 text-slate-500 space-y-2">
-                  <AudioLines className="w-8 h-8 text-slate-400" aria-hidden="true" />
-                  <p className="text-sm font-medium text-slate-700">
+                <div className="h-full flex flex-col items-center justify-center text-center px-6 py-8 text-slate-500 dark:text-slate-400 space-y-2">
+                  <AudioLines className="w-8 h-8 text-slate-400 dark:text-slate-500" aria-hidden="true" />
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
                     พร้อมสนทนาเรื่องรถอ้วนพีด้วยเสียง
                   </p>
-                  <p className="text-xs text-slate-500 max-w-sm">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm">
                     กดปุ่ม &ldquo;เริ่มคุยด้วยเสียงสด&rdquo; แล้วพูดถามได้เลย เช่น &ldquo;ถ้าจะขับไปเชียงใหม่ น้ำมันในถังพอไหม&rdquo; หรือ &ldquo;ใกล้ถึงรอบเปลี่ยนน้ำมันเครื่องหรือยัง&rdquo;
                   </p>
                 </div>
@@ -1045,11 +1045,11 @@ export function AiAssistantDrawer({
                     key={item.id}
                     className={`rounded-xl px-3.5 py-2.5 text-sm leading-relaxed border ${
                       item.role === 'user'
-                        ? 'bg-blue-50 border-blue-200 text-blue-950 ml-8'
-                        : 'bg-white border-slate-200 text-slate-800 mr-8'
+                        ? 'bg-blue-50 border-blue-200 text-blue-950 dark:bg-blue-950/50 dark:border-blue-800 dark:text-blue-100 ml-8'
+                        : 'bg-white border-slate-200 text-slate-800 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 mr-8'
                     }`}
                   >
-                    <p className="text-[11px] font-semibold text-slate-500 mb-0.5">
+                    <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-0.5">
                       {item.role === 'user' ? 'คุณ' : 'ผู้ช่วย AI'}
                     </p>
                     <p className="whitespace-pre-wrap">{item.text}</p>
@@ -1061,7 +1061,7 @@ export function AiAssistantDrawer({
             {voiceStatus === 'live' && (
               <form
                 onSubmit={handleVoiceTextSubmit}
-                className="p-3.5 border-t border-slate-200 bg-white flex items-center gap-2 shrink-0"
+                className="p-3.5 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center gap-2 shrink-0"
               >
                 <label htmlFor="voice-text-prompt" className="sr-only">
                   ส่งข้อความแทรกในสายเสียงสด
@@ -1072,12 +1072,12 @@ export function AiAssistantDrawer({
                   value={voiceTextInput}
                   onChange={(e) => setVoiceTextInput(e.target.value)}
                   placeholder="หรือพิมพ์ข้อความแทรกให้ AI อ่านตอบเป็นเสียง..."
-                  className="flex-1 min-h-[38px] px-3 py-1.5 rounded-lg border border-slate-300 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  className="flex-1 min-h-[38px] px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs text-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-600"
                 />
                 <button
                   type="submit"
                   disabled={!voiceTextInput.trim()}
-                  className="min-h-[38px] px-3.5 rounded-lg bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white text-xs font-medium cursor-pointer"
+                  className="min-h-[38px] px-3.5 rounded-lg bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white dark:text-slate-900 disabled:opacity-50 text-white text-xs font-medium cursor-pointer"
                 >
                   ส่ง
                 </button>
