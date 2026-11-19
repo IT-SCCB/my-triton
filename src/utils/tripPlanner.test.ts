@@ -13,6 +13,7 @@ import {
   evaluateTripMaintenanceImpacts,
   extractDestinationFromRouteName,
   interpolatePointAtDistanceKm,
+  TRIP_PRESET_ROUTES,
 } from './tripPlanner';
 
 test('calculateTripEstimate computes round-trip fuel liters, cost, and refill stops accurately', () => {
@@ -269,5 +270,13 @@ test('analyzeFuelPriceTrend and computeAnnualFuelCostForecast project 12 months 
   assert.equal(fallbackForecast.mileageSource, 'default_estimate');
   assert.equal(fallbackForecast.historicalMonthlyKm, 900);
   assert.equal(fallbackForecast.points.length, 12);
+});
+
+test('TRIP_PRESET_ROUTES includes Siam CC Bang Na to Na Yai Am Chanthaburi route with exact coordinates', () => {
+  const preset = TRIP_PRESET_ROUTES.find((r) => r.id === 'siamcc-nayaiam');
+  assert.ok(preset, 'Expected siamcc-nayaiam preset to exist');
+  assert.equal(preset.oneWayKm, 174);
+  assert.deepEqual(preset.originCoords, { lat: 13.6143643, lng: 100.7913915 });
+  assert.deepEqual(preset.destinationCoords, { lat: 12.7550739, lng: 101.8605464 });
 });
 

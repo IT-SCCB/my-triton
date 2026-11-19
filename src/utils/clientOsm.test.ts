@@ -6,6 +6,7 @@ import {
   filterAlongRouteStations,
   filterNearbyStations,
   mapStaticStationToItem,
+  parseLatLngText,
   sampleRoutePoints,
 } from './clientOsm';
 import type { StaticStation } from './clientOsm';
@@ -158,3 +159,17 @@ test('sampleRoutePoints returns the single point for a trivial route', () => {
   ]);
   assert.deepEqual(sampleRoutePoints([]), []);
 });
+
+test('parseLatLngText parses valid coordinate strings and rejects invalid input', () => {
+  assert.deepEqual(parseLatLngText('12.7550739, 101.8605464'), {
+    lat: 12.7550739,
+    lng: 101.8605464,
+  });
+  assert.deepEqual(parseLatLngText('13.6143643,100.7913915'), {
+    lat: 13.6143643,
+    lng: 100.7913915,
+  });
+  assert.equal(parseLatLngText('ช้างข้าม นายายอาม จันทบุรี'), null);
+  assert.equal(parseLatLngText('95.0, 101.0'), null);
+});
+

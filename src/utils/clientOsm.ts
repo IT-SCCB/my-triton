@@ -310,7 +310,22 @@ export async function searchFuelAlongRoute(
   );
 }
 
+export function parseLatLngText(input: string): LatLngPoint | null {
+  const match = input
+    .trim()
+    .match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
+  if (!match) return null;
+  const lat = Number(match[1]);
+  const lng = Number(match[2]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  return { lat, lng };
+}
+
 export async function geocodePlace(query: string): Promise<LatLngPoint | null> {
+  const parsedCoords = parseLatLngText(query);
+  if (parsedCoords) return parsedCoords;
+
   const url =
     `${NOMINATIM_URL}?format=json&limit=1&countrycodes=th` +
     `&q=${encodeURIComponent(query.trim())}`;
@@ -369,9 +384,16 @@ export async function fetchOsrmRoute(
 export async function fetchRouteStations(params: {
   origin: LatLngPoint;
   destinationQuery?: string;
+  destinationCoords?: LatLngPoint | null;
 }): Promise<RouteStationsApiResponse> {
   const { origin } = params;
   const destinationQuery = (params.destinationQuery ?? '').trim();
+  const presetDestinationCoords =
+    params.destinationCoords &&
+    Number.isFinite(params.destinationCoords.lat) &&
+    Number.isFinite(params.destinationCoords.lng)
+      ? params.destinationCoords
+      : null;
 
   // โหลดไฟล์ปั๊มก่อน — ถ้าไฟล์โหลดไม่ได้ ให้ error นี้เด้งขึ้นไปบอกผู้ใช้ตรงๆ
   const stations = await loadThailandStations();
@@ -382,12 +404,14 @@ export async function fetchRouteStations(params: {
   let alongRouteStations: GasStationApiItem[] = [];
   let routeNotice: string | null = null;
 
-  if (destinationQuery) {
-    let destination: LatLngPoint | null = null;
-    try {
-      destination = await geocodePlace(destinationQuery);
-    } catch (err) {
-      routeNotice = `หาตำแหน่งปลายทางไม่เจอ (${err instanceof Error ? err.message : 'ไม่ทราบสาเหตุ'}) แสดงปั๊มใกล้จุดเริ่มต้นแทน`;
+  if (presetDestinationCoords || destinationQuery) {
+    let destination: LatLngPoint | null = presetDestinationCoords;
+    if (!destination && destinationQuery) {
+      try {
+        destination = await geocodePlace(destinationQuery);
+      } catch (err) {
+        routeNotice = `หาตำแหน่งปลายทางไม่เจอ (${err instanceof Error ? err.message : 'ไม่ทราบสาเหตุ'}) แสดงปั๊มใกล้จุดเริ่มต้นแทน`;
+      }
     }
     if (destination) {
       try {

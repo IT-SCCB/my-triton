@@ -147,8 +147,8 @@ export function TripStationsMapPanel({
 
   if (loading) {
     return (
-      <div className="border-t border-slate-200 bg-slate-50/70 p-6 flex items-center justify-center gap-3 text-sm text-slate-700">
-        <Loader2 className="w-5 h-5 text-blue-700 animate-spin shrink-0" aria-hidden="true" />
+      <div className="border-t border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 p-6 flex items-center justify-center gap-3 text-sm text-slate-700 dark:text-slate-200">
+        <Loader2 className="w-5 h-5 text-blue-700 dark:text-blue-400 animate-spin shrink-0" aria-hidden="true" />
         <span>กำลังระบุพิกัด GPS และค้นหาปั๊มน้ำมันตลอดเส้นทางบน OpenStreetMap...</span>
       </div>
     );
@@ -159,19 +159,19 @@ export function TripStationsMapPanel({
   if (!data) {
     if (error) {
       return (
-        <div className="border-t border-slate-200 bg-red-50/60 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-start gap-2.5 text-sm text-red-900">
-            <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" aria-hidden="true" />
+        <div className="border-t border-slate-200 dark:border-slate-800 bg-red-50/60 dark:bg-red-950/30 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-2.5 text-sm text-red-900 dark:text-red-200">
+            <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" aria-hidden="true" />
             <div>
               <p className="font-medium">ไม่สามารถโหลดแผนที่หรือค้นหาปั๊มน้ำมันได้</p>
-              <p className="text-xs text-red-800 mt-0.5">{error}</p>
+              <p className="text-xs text-red-800 dark:text-red-300 mt-0.5">{error}</p>
             </div>
           </div>
           {onRetrySearch && (
             <button
               type="button"
               onClick={onRetrySearch}
-              className="px-3.5 py-2 rounded-lg border border-red-300 bg-white text-red-900 hover:bg-red-50 text-xs font-medium cursor-pointer shrink-0 self-start sm:self-auto"
+              className="px-3.5 py-2 rounded-lg border border-red-300 dark:border-red-700 bg-white dark:bg-slate-900 text-red-900 dark:text-red-200 hover:bg-red-50 dark:hover:bg-red-950/50 text-xs font-medium cursor-pointer shrink-0 self-start sm:self-auto"
             >
               ลองค้นหาอีกครั้ง
             </button>
@@ -185,16 +185,16 @@ export function TripStationsMapPanel({
   return (
     <div
       data-testid="trip-stations-map-panel"
-      className="border-t border-slate-200 bg-white p-5 sm:p-6 space-y-4"
+      className="border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 space-y-4"
     >
       {/* Panel Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div>
-          <h3 className="text-sm sm:text-base font-semibold text-slate-900 flex items-center gap-2">
-            <Navigation className="w-4 h-4 text-blue-700 shrink-0" aria-hidden="true" />
+          <h3 className="text-sm sm:text-base font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+            <Navigation className="w-4 h-4 text-blue-700 dark:text-blue-400 shrink-0" aria-hidden="true" />
             <span>แผนที่เส้นทาง & จุดแวะเติมน้ำมันตามระยะถัง ({tankCapacityLiters} ลิตร)</span>
           </h3>
-          <p className="text-xs text-slate-600 mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+          <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="inline-flex items-center gap-1">
               <Compass className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
               {locationLabel}
@@ -203,7 +203,7 @@ export function TripStationsMapPanel({
             {data.route && (
               <>
                 <span aria-hidden="true">·</span>
-                <span className="font-mono tabular-nums font-medium text-slate-800">
+                <span className="font-mono tabular-nums font-medium text-slate-800 dark:text-slate-200">
                   ระยะทางจริงขาเดียว {formatKm(routeDistanceKm)} กม. ({formatDurationThai(data.route.durationSeconds)})
                 </span>
               </>
@@ -219,7 +219,7 @@ export function TripStationsMapPanel({
               <button
                 type="button"
                 onClick={() => onApplyRouteDistanceKm(routeDistanceKm)}
-                className="px-3 py-1.5 min-h-[34px] rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-900 text-xs font-medium transition-colors cursor-pointer"
+                className="px-3 py-1.5 min-h-[34px] rounded-lg border border-blue-200 dark:border-blue-800/70 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-900 dark:text-blue-200 text-xs font-medium transition-colors cursor-pointer"
               >
                 ใช้ระยะทางจริง ({formatKm(routeDistanceKm)} กม.) คำนวณค่าน้ำมัน
               </button>
@@ -228,7 +228,7 @@ export function TripStationsMapPanel({
           <div
             role="group"
             aria-label="มุมมองรายการปั๊มน้ำมัน"
-            className="inline-flex p-1 rounded-lg bg-slate-100"
+            className="inline-flex p-1 rounded-lg bg-slate-100 dark:bg-slate-800"
           >
             <button
               type="button"
@@ -236,8 +236,8 @@ export function TripStationsMapPanel({
               disabled={enrichedAlongStations.length === 0}
               className={`px-3 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
                 listMode === 'along'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               ตามเส้นทาง ({enrichedAlongStations.length})
@@ -247,8 +247,8 @@ export function TripStationsMapPanel({
               onClick={() => setListMode('nearby')}
               className={`px-3 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${
                 listMode === 'nearby'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               ใกล้ตำแหน่งฉัน ({enrichedNearbyStations.length})
@@ -258,14 +258,14 @@ export function TripStationsMapPanel({
       </div>
 
       {error && (
-        <div className="text-xs text-red-900 bg-red-50 border border-red-200 rounded-lg px-3.5 py-2 flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" aria-hidden="true" />
+        <div className="text-xs text-red-900 dark:text-red-200 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/60 rounded-lg px-3.5 py-2 flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0" aria-hidden="true" />
           <span>{error}</span>
           {onRetrySearch && (
             <button
               type="button"
               onClick={onRetrySearch}
-              className="ml-auto px-2.5 py-1 rounded-md border border-red-300 bg-white text-red-900 hover:bg-red-50 text-[11px] font-medium cursor-pointer shrink-0"
+              className="ml-auto px-2.5 py-1 rounded-md border border-red-300 dark:border-red-700 bg-white dark:bg-slate-900 text-red-900 dark:text-red-200 hover:bg-red-50 dark:hover:bg-red-950/50 text-[11px] font-medium cursor-pointer shrink-0"
             >
               ลองค้นหาอีกครั้ง
             </button>
@@ -274,26 +274,26 @@ export function TripStationsMapPanel({
       )}
 
       {data.routeNotice && (
-        <div className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3.5 py-2 flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" aria-hidden="true" />
+        <div className="text-xs text-amber-900 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-lg px-3.5 py-2 flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" aria-hidden="true" />
           <span>{data.routeNotice}</span>
         </div>
       )}
 
       {/* Tank Range Progress Along Route */}
       {data.route && routeDistanceKm > 0 && (
-        <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-2.5">
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 p-4 space-y-2.5">
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-            <span className="font-medium text-slate-800 flex items-center gap-1.5">
-              <Fuel className="w-3.5 h-3.5 text-amber-600" aria-hidden="true" />
+            <span className="font-medium text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+              <Fuel className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" aria-hidden="true" />
               ระยะวิ่งจากน้ำมันในถังปัจจุบัน ({fuelPercent}% ≈ {estimate.currentTankLiters.toFixed(1)} ล.)
             </span>
-            <span className="font-mono tabular-nums text-slate-600">
+            <span className="font-mono tabular-nums text-slate-600 dark:text-slate-300">
               วิ่งได้ก่อนเข้าขีดสำรอง ~{formatKm(estimate.estimatedCurrentRangeKm)} กม. / เส้นทาง {formatKm(routeDistanceKm)} กม.
             </span>
           </div>
 
-          <div className="relative w-full h-3 bg-slate-200 rounded-full overflow-hidden">
+          <div className="relative w-full h-3 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
             <div
               className={`h-full transition-all duration-300 ${
                 estimate.estimatedCurrentRangeKm >= routeDistanceKm
@@ -304,16 +304,16 @@ export function TripStationsMapPanel({
             />
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-600">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-600 dark:text-slate-400">
             {estimate.estimatedCurrentRangeKm >= routeDistanceKm ? (
-              <span className="inline-flex items-center gap-1 text-emerald-800 font-medium">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" aria-hidden="true" />
+              <span className="inline-flex items-center gap-1 text-emerald-800 dark:text-emerald-300 font-medium">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400" aria-hidden="true" />
                 ขาเดียวนี้วิ่งถึงปลายทางได้โดยไม่ต้องแวะเติมเพิ่ม
                 {!estimate.canCompleteWithCurrentFuel && ' (แต่ต้องเติมเพิ่มสำหรับการเดินทางขากลับ)'}
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1 text-amber-900 font-medium">
-                <AlertTriangle className="w-3.5 h-3.5 text-amber-700" aria-hidden="true" />
+              <span className="inline-flex items-center gap-1 text-amber-900 dark:text-amber-200 font-medium">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-700 dark:text-amber-400" aria-hidden="true" />
                 น้ำมันปัจจุบันจะเข้าขีดสำรองราว กม.ที่ {formatKm(estimate.estimatedCurrentRangeKm)}
                 {recommendedCount > 0 && ` · พบจุดแนะนำแวะเติม ${recommendedCount} แห่งก่อนถึงจุดเตือน`}
               </span>
@@ -340,7 +340,7 @@ export function TripStationsMapPanel({
       {/* Map + Stations Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
         <div className="lg:col-span-7">
-          <div className="w-full h-[380px] sm:h-[440px] rounded-xl overflow-hidden border border-slate-200 bg-slate-100 relative">
+          <div className="w-full h-[380px] sm:h-[440px] rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 relative">
             <OsmMapView
               origin={data.origin}
               originLabel={locationLabel}
@@ -366,7 +366,7 @@ export function TripStationsMapPanel({
               }}
             />
           </div>
-          <p className="text-[11px] text-slate-400 mt-1.5 text-right">
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1.5 text-right">
             แผนที่ © OpenStreetMap contributors · ข้อมูลปั๊ม OSM (ไฟล์ static 19 พ.ย. 2569) · เส้นทางด้วย OSRM
           </p>
         </div>
@@ -374,7 +374,7 @@ export function TripStationsMapPanel({
         {/* Station List */}
         <div className="lg:col-span-5 space-y-2.5 max-h-[440px] overflow-y-auto pr-1">
           {displayedStations.length === 0 ? (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-600">
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 p-6 text-center text-sm text-slate-600 dark:text-slate-300">
               ไม่พบปั๊มน้ำมันในบริเวณที่ค้นหา
             </div>
           ) : (
@@ -400,19 +400,19 @@ export function TripStationsMapPanel({
                   }}
                   className={`rounded-xl border p-3.5 transition-colors cursor-pointer ${
                     selected
-                      ? 'border-blue-700 bg-blue-50/60'
+                      ? 'border-blue-700 dark:border-blue-500 bg-blue-50/60 dark:bg-blue-950/50'
                       : st.fuelStatus === 'recommended_stop'
-                        ? 'border-amber-300 bg-amber-50/40 hover:bg-amber-50'
-                        : 'border-slate-200 bg-white hover:bg-slate-50'
+                        ? 'border-amber-300 dark:border-amber-700/70 bg-amber-50/40 dark:bg-amber-950/30 hover:bg-amber-50 dark:hover:bg-amber-950/50'
+                        : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/70'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-slate-900 truncate">
+                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
                         {st.name}
                       </p>
                       {st.address && (
-                        <p className="text-xs text-slate-500 line-clamp-1 mt-0.5">
+                        <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-1 mt-0.5">
                           {st.address}
                         </p>
                       )}
@@ -422,8 +422,8 @@ export function TripStationsMapPanel({
                       <span
                         className={`shrink-0 px-2 py-0.5 rounded text-[11px] font-medium ${
                           st.openNow
-                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                            : 'bg-slate-100 text-slate-600 border border-slate-200'
+                            ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
                         }`}
                       >
                         {st.openNow ? 'เปิดอยู่' : 'ปิดอยู่'}
@@ -431,19 +431,19 @@ export function TripStationsMapPanel({
                     )}
                   </div>
 
-                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-700">
-                    <span className="font-mono tabular-nums font-medium text-slate-900">
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-700 dark:text-slate-300">
+                    <span className="font-mono tabular-nums font-medium text-slate-900 dark:text-slate-100">
                       {st.routeKmPosition !== null
                         ? `กม.ที่ ${st.routeKmPosition.toLocaleString('th-TH')}`
                         : `ห่าง ${st.distanceKmFromOrigin.toLocaleString('th-TH')} กม.`}
                     </span>
                     {st.durationMinutes !== null && (
-                      <span className="font-mono tabular-nums text-slate-500">
+                      <span className="font-mono tabular-nums text-slate-500 dark:text-slate-400">
                         ~{st.durationMinutes} นาที
                       </span>
                     )}
                     {st.rating !== null && (
-                      <span className="inline-flex items-center gap-0.5 font-mono tabular-nums text-amber-700">
+                      <span className="inline-flex items-center gap-0.5 font-mono tabular-nums text-amber-700 dark:text-amber-400">
                         <Star className="w-3 h-3 fill-amber-500 text-amber-500" aria-hidden="true" />
                         {st.rating.toFixed(1)}
                         {st.userRatingCount ? ` (${st.userRatingCount})` : ''}
@@ -451,14 +451,14 @@ export function TripStationsMapPanel({
                     )}
                   </div>
 
-                  <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                  <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
                     <span
                       className={`text-[11px] font-medium ${
                         st.fuelStatus === 'recommended_stop'
-                          ? 'text-amber-800'
+                          ? 'text-amber-800 dark:text-amber-300'
                           : st.fuelStatus === 'within_tank'
-                            ? 'text-emerald-800'
-                            : 'text-slate-500'
+                            ? 'text-emerald-800 dark:text-emerald-300'
+                            : 'text-slate-500 dark:text-slate-400'
                       }`}
                     >
                       {st.fuelStatus === 'recommended_stop'
@@ -474,7 +474,7 @@ export function TripStationsMapPanel({
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={(e) => e.stopPropagation()}
-                        className="inline-flex items-center gap-1 text-xs font-medium text-blue-700 hover:text-blue-900 hover:underline shrink-0"
+                        className="inline-flex items-center gap-1 text-xs font-medium text-blue-700 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 hover:underline shrink-0"
                       >
                         <span>นำทาง</span>
                         <ExternalLink className="w-3 h-3" aria-hidden="true" />

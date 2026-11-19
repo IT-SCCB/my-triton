@@ -60,6 +60,7 @@ interface TripPlannerSectionProps {
   alertThresholdKm: number;
   odometerLogs?: OdometerLogEntry[];
   fuelLogs?: FuelLogEntry[];
+  isDark?: boolean;
   onTripEstimateChange?: (estimate: TripPlanEstimate) => void;
   onAskAiAboutTrip?: (estimate: TripPlanEstimate) => void;
 }
@@ -126,6 +127,7 @@ export function TripPlannerSection({
   alertThresholdKm,
   odometerLogs = [],
   fuelLogs = [],
+  isDark = false,
   onTripEstimateChange,
   onAskAiAboutTrip,
 }: TripPlannerSectionProps) {
@@ -246,6 +248,11 @@ export function TripPlannerSection({
       ? Math.min(100, Math.round((estimate.estimatedCurrentRangeKm / estimate.totalDistanceKm) * 100))
       : 100;
 
+  const activePreset = useMemo(
+    () => TRIP_PRESET_ROUTES.find((p) => p.id === selectedPresetId) ?? null,
+    [selectedPresetId]
+  );
+
   function handleSelectPreset(presetId: string) {
     const preset = TRIP_PRESET_ROUTES.find((p) => p.id === presetId);
     if (!preset) return;
@@ -273,10 +280,15 @@ export function TripPlannerSection({
       // ไม่ต้องใช้ API key และไม่ต้องมีเซิร์ฟเวอร์หลังบ้าน จึงใช้บน GitHub Pages ได้
       const resolvedDestination =
         destinationQuery.trim() || extractDestinationFromRouteName(routeName);
+      const presetDestCoords =
+        !destinationDirty && activePreset?.destinationCoords
+          ? activePreset.destinationCoords
+          : null;
 
       const payload = await fetchRouteStations({
         origin,
         destinationQuery: resolvedDestination || undefined,
+        destinationCoords: presetDestCoords,
       });
 
       setStationsData(payload);
@@ -334,7 +346,15 @@ export function TripPlannerSection({
     );
   }
 
-  function handleSearchFromBangkokFallback() {
+  function handleSearchFromPresetOrBangkokFallback() {
+    if (activePreset?.originCoords) {
+      void fetchStationsForOrigin(
+        activePreset.originCoords,
+        activePreset.origin,
+        true
+      );
+      return;
+    }
     void fetchStationsForOrigin(
       { lat: 13.7563, lng: 100.5018 },
       'กรุงเทพมหานคร',
@@ -348,18 +368,18 @@ export function TripPlannerSection({
         <div>
           <h2
             id="trip-planner-heading"
-            className="font-display text-xl sm:text-2xl font-semibold text-slate-900 flex items-center gap-2"
+            className="font-display text-xl sm:text-2xl font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2"
           >
-            <Route className="w-5 h-5 text-blue-700 shrink-0" aria-hidden="true" />
+            <Route className="w-5 h-5 text-blue-700 dark:text-blue-400 shrink-0" aria-hidden="true" />
             <span>คำนวณค่าน้ำมัน & วางแผนเดินทาง</span>
           </h2>
-          <p className="text-sm text-slate-600 mt-0.5">
+          <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">
             ประเมินค่าน้ำมัน จำนวนลิตร จุดแวะเติม และเช็กผลกระทบต่อรอบซ่อมบำรุงล่วงหน้า จากค่าเฉลี่ย{' '}
-            <span className="font-mono tabular-nums font-medium text-slate-800">
+            <span className="font-mono tabular-nums font-medium text-slate-800 dark:text-slate-200">
               {defaultKml.toFixed(2)} กม./ลิตร
             </span>{' '}
             · ราคาล่าสุด{' '}
-            <span className="font-mono tabular-nums font-medium text-slate-800">
+            <span className="font-mono tabular-nums font-medium text-slate-800 dark:text-slate-200">
               {defaultPrice.toFixed(2)} บ./ลิตร
             </span>
           </p>
@@ -371,9 +391,9 @@ export function TripPlannerSection({
             onClick={handleFindNearbyStations}
             disabled={stationsLoading}
             data-testid="find-nearby-stations-btn"
-            className="inline-flex items-center justify-center gap-1.5 min-h-[40px] px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 disabled:opacity-60 text-white text-sm font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            className="inline-flex items-center justify-center gap-1.5 min-h-[40px] px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 dark:bg-blue-600 dark:hover:bg-blue-500 disabled:opacity-60 text-white text-sm font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer"
           >
-            <Navigation className="w-4 h-4 text-emerald-400 shrink-0" aria-hidden="true" />
+            <Navigation className="w-4 h-4 text-emerald-400 dark:text-emerald-200 shrink-0" aria-hidden="true" />
             <span>ค้นหาปั๊มน้ำมันใกล้เคียง</span>
           </button>
 
@@ -382,46 +402,64 @@ export function TripPlannerSection({
               type="button"
               onClick={() => onAskAiAboutTrip(estimate)}
               data-testid="trip-ask-ai-btn"
-              className="inline-flex items-center justify-center gap-1.5 min-h-[40px] px-4 py-2 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-900 text-sm font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              className="inline-flex items-center justify-center gap-1.5 min-h-[40px] px-4 py-2 rounded-lg border border-blue-200 dark:border-blue-800/70 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-900 dark:text-blue-200 text-sm font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer"
             >
-              <Sparkles className="w-4 h-4 text-blue-700 shrink-0" aria-hidden="true" />
+              <Sparkles className="w-4 h-4 text-blue-700 dark:text-blue-400 shrink-0" aria-hidden="true" />
               <span>ปรึกษา AI เรื่องทริปนี้</span>
             </button>
           )}
         </div>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
         {/* Preset Routes Strip */}
-        <div className="px-5 py-3.5 border-b border-slate-200 bg-slate-50/70 flex flex-wrap items-center gap-2">
-          <span className="text-xs font-medium text-slate-600 mr-1 flex items-center gap-1">
-            <MapPin className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
-            เส้นทางยอดนิยม:
-          </span>
-          {TRIP_PRESET_ROUTES.map((preset) => {
-            const active = selectedPresetId === preset.id && routeName === preset.label;
-            return (
+        <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-medium text-slate-600 dark:text-slate-300 mr-1 flex items-center gap-1">
+              <MapPin className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" aria-hidden="true" />
+              เส้นทางแนะนำ:
+            </span>
+            {TRIP_PRESET_ROUTES.map((preset) => {
+              const active = selectedPresetId === preset.id && routeName === preset.label;
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => handleSelectPreset(preset.id)}
+                  data-testid={`trip-preset-${preset.id}`}
+                  className={`px-3 py-1.5 min-h-[34px] rounded-lg border text-xs font-medium transition-colors whitespace-nowrap cursor-pointer ${
+                    active
+                      ? 'border-blue-700 bg-blue-700 text-white'
+                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  {preset.label}{' '}
+                  <span className={`font-mono tabular-nums ${active ? 'text-blue-100' : 'text-slate-400 dark:text-slate-500'}`}>
+                    ({preset.oneWayKm} กม.)
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {activePreset?.originCoords && (
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600 dark:text-slate-300 pt-1">
+              <span>{activePreset.note}</span>
               <button
-                key={preset.id}
                 type="button"
-                onClick={() => handleSelectPreset(preset.id)}
-                data-testid={`trip-preset-${preset.id}`}
-                className={`px-3 py-1.5 min-h-[34px] rounded-lg border text-xs font-medium transition-colors whitespace-nowrap cursor-pointer ${
-                  active
-                    ? 'border-blue-700 bg-blue-700 text-white'
-                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100'
-                }`}
+                onClick={handleSearchFromPresetOrBangkokFallback}
+                disabled={stationsLoading}
+                data-testid="preset-route-preview-btn"
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-700 dark:text-blue-400 hover:underline cursor-pointer disabled:opacity-60"
               >
-                {preset.label}{' '}
-                <span className={`font-mono tabular-nums ${active ? 'text-blue-100' : 'text-slate-400'}`}>
-                  ({preset.oneWayKm} กม.)
-                </span>
+                <Compass className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                <span>ดูเส้นทางและปั๊มน้ำมันจาก {activePreset.origin}</span>
               </button>
-            );
-          })}
+            </div>
+          )}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x divide-slate-200">
+        <div className="grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x divide-slate-200 dark:divide-slate-800">
           {/* Left: Inputs */}
           <div className="lg:col-span-6 p-5 sm:p-6 space-y-5">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -429,7 +467,7 @@ export function TripPlannerSection({
                 <div>
                   <label
                     htmlFor="trip-route-name"
-                    className="block text-xs font-medium text-slate-700 mb-1.5"
+                    className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5"
                   >
                     ชื่อทริป / เส้นทาง
                   </label>
@@ -446,14 +484,14 @@ export function TripPlannerSection({
                       }
                     }}
                     placeholder="เช่น กรุงเทพฯ – เชียงใหม่"
-                    className="w-full min-h-[40px] px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                    className="w-full min-h-[40px] px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600"
                   />
                 </div>
 
                 <div>
                   <label
                     htmlFor="trip-destination-query"
-                    className="block text-xs font-medium text-slate-700 mb-1.5"
+                    className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5"
                   >
                     ปลายทางสำหรับค้นหาปั๊มตามเส้นทาง
                   </label>
@@ -467,7 +505,7 @@ export function TripPlannerSection({
                     }}
                     placeholder="เช่น พัทยา ชลบุรี หรือ อำเภอเมืองเชียงใหม่"
                     data-testid="trip-destination-input"
-                    className="w-full min-h-[40px] px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                    className="w-full min-h-[40px] px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600"
                   />
                 </div>
               </div>
@@ -475,7 +513,7 @@ export function TripPlannerSection({
               <div>
                 <label
                   htmlFor="trip-oneway-km"
-                  className="block text-xs font-medium text-slate-700 mb-1.5"
+                  className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5"
                 >
                   ระยะทางขาเดียว (กม.)
                 </label>
@@ -491,18 +529,18 @@ export function TripPlannerSection({
                     setSelectedPresetId('');
                   }}
                   data-testid="trip-distance-input"
-                  className="w-full min-h-[40px] px-3 py-2 rounded-lg border border-slate-300 font-mono text-sm tabular-nums text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  className="w-full min-h-[40px] px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-mono text-sm tabular-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
 
               <div>
-                <span className="block text-xs font-medium text-slate-700 mb-1.5">
+                <span className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                   รูปแบบการเดินทาง
                 </span>
                 <div
                   role="group"
                   aria-label="รูปแบบการเดินทาง"
-                  className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-lg"
+                  className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg"
                 >
                   <button
                     type="button"
@@ -510,8 +548,8 @@ export function TripPlannerSection({
                     data-testid="trip-mode-oneway"
                     className={`min-h-[34px] px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
                       !roundTrip
-                        ? 'bg-white text-slate-900 shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900'
+                        ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-xs'
+                        : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
                     }`}
                   >
                     เที่ยวเดียว
@@ -522,11 +560,11 @@ export function TripPlannerSection({
                     data-testid="trip-mode-roundtrip"
                     className={`inline-flex items-center justify-center gap-1 min-h-[34px] px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
                       roundTrip
-                        ? 'bg-white text-slate-900 shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900'
+                        ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-xs'
+                        : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
                     }`}
                   >
-                    <ArrowLeftRight className="w-3.5 h-3.5 text-blue-700" aria-hidden="true" />
+                    <ArrowLeftRight className="w-3.5 h-3.5 text-blue-700 dark:text-blue-400" aria-hidden="true" />
                     <span>ไป-กลับ (×2)</span>
                   </button>
                 </div>
@@ -535,7 +573,7 @@ export function TripPlannerSection({
 
             {/* Driving Conditions */}
             <div className="space-y-2">
-              <span className="block text-xs font-medium text-slate-700">
+              <span className="block text-xs font-medium text-slate-700 dark:text-slate-300">
                 สภาพเส้นทางและการขับขี่
               </span>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -550,32 +588,32 @@ export function TripPlannerSection({
                       data-testid={`trip-condition-${key}`}
                       className={`text-left p-3 rounded-lg border transition-colors cursor-pointer ${
                         active
-                          ? 'border-blue-700 bg-blue-50/70'
-                          : 'border-slate-200 bg-white hover:bg-slate-50'
+                          ? 'border-blue-700 dark:border-blue-500 bg-blue-50/70 dark:bg-blue-950/50'
+                          : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/70'
                       }`}
                     >
-                      <p className={`text-xs font-semibold ${active ? 'text-blue-900' : 'text-slate-800'}`}>
+                      <p className={`text-xs font-semibold ${active ? 'text-blue-900 dark:text-blue-200' : 'text-slate-800 dark:text-slate-200'}`}>
                         {cfg.label}
                       </p>
-                      <p className={`font-mono text-[11px] tabular-nums mt-0.5 ${active ? 'text-blue-700 font-medium' : 'text-slate-500'}`}>
+                      <p className={`font-mono text-[11px] tabular-nums mt-0.5 ${active ? 'text-blue-700 dark:text-blue-300 font-medium' : 'text-slate-500 dark:text-slate-400'}`}>
                         {cfg.adjustmentLabel}
                       </p>
                     </button>
                   );
                 })}
               </div>
-              <p className="text-[11px] text-slate-500">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
                 {DRIVING_CONDITION_CONFIG[drivingCondition].description}
               </p>
             </div>
 
             {/* KML & Fuel Price */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800">
               <div>
                 <div className="flex items-center justify-between gap-2 mb-1.5">
                   <label
                     htmlFor="trip-base-kml"
-                    className="text-xs font-medium text-slate-700"
+                    className="text-xs font-medium text-slate-700 dark:text-slate-300"
                   >
                     อัตราสิ้นเปลืองตั้งต้น (กม./ลิตร)
                   </label>
@@ -586,7 +624,7 @@ export function TripPlannerSection({
                         setKmlDirty(false);
                         setKmlInput(defaultKml.toFixed(2));
                       }}
-                      className="inline-flex items-center gap-1 text-[11px] text-blue-700 hover:text-blue-800 font-medium cursor-pointer"
+                      className="inline-flex items-center gap-1 text-[11px] text-blue-700 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium cursor-pointer"
                     >
                       <RotateCcw className="w-3 h-3" aria-hidden="true" />
                       <span>ค่าเฉลี่ย ({defaultKml.toFixed(2)})</span>
@@ -605,17 +643,17 @@ export function TripPlannerSection({
                     setKmlInput(e.target.value);
                   }}
                   data-testid="trip-kml-input"
-                  className="w-full min-h-[40px] px-3 py-2 rounded-lg border border-slate-300 font-mono text-sm tabular-nums text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  className="w-full min-h-[40px] px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-mono text-sm tabular-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600"
                 />
                 {fuelStats.lastKml > 0 && (
-                  <div className="flex items-center gap-2 mt-1.5 text-[11px] text-slate-500">
+                  <div className="flex items-center gap-2 mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
                     <button
                       type="button"
                       onClick={() => {
                         setKmlDirty(true);
                         setKmlInput(defaultKml.toFixed(2));
                       }}
-                      className="text-blue-700 hover:underline cursor-pointer font-mono tabular-nums"
+                      className="text-blue-700 dark:text-blue-400 hover:underline cursor-pointer font-mono tabular-nums"
                     >
                       เฉลี่ย {defaultKml.toFixed(2)}
                     </button>
@@ -626,7 +664,7 @@ export function TripPlannerSection({
                         setKmlDirty(true);
                         setKmlInput(fuelStats.lastKml.toFixed(2));
                       }}
-                      className="text-slate-600 hover:text-slate-900 hover:underline cursor-pointer font-mono tabular-nums"
+                      className="text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:underline cursor-pointer font-mono tabular-nums"
                     >
                       รอบล่าสุด {fuelStats.lastKml.toFixed(2)}
                     </button>
@@ -638,7 +676,7 @@ export function TripPlannerSection({
                 <div className="flex items-center justify-between gap-2 mb-1.5">
                   <label
                     htmlFor="trip-fuel-price"
-                    className="text-xs font-medium text-slate-700"
+                    className="text-xs font-medium text-slate-700 dark:text-slate-300"
                   >
                     ราคาน้ำมันดีเซล (บาท/ลิตร)
                   </label>
@@ -649,7 +687,7 @@ export function TripPlannerSection({
                         setPriceDirty(false);
                         setPriceInput(defaultPrice.toFixed(2));
                       }}
-                      className="inline-flex items-center gap-1 text-[11px] text-blue-700 hover:text-blue-800 font-medium cursor-pointer"
+                      className="inline-flex items-center gap-1 text-[11px] text-blue-700 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium cursor-pointer"
                     >
                       <RotateCcw className="w-3 h-3" aria-hidden="true" />
                       <span>ราคาล่าสุด ({defaultPrice.toFixed(2)})</span>
@@ -668,18 +706,18 @@ export function TripPlannerSection({
                     setPriceInput(e.target.value);
                   }}
                   data-testid="trip-price-input"
-                  className="w-full min-h-[40px] px-3 py-2 rounded-lg border border-slate-300 font-mono text-sm tabular-nums text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  className="w-full min-h-[40px] px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-mono text-sm tabular-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600"
                 />
-                <p className="text-[11px] text-slate-500 mt-1.5">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1.5">
                   อิงราคาเติมล่าสุด {defaultPrice.toFixed(2)} บ./ลิตร
                 </p>
               </div>
             </div>
 
             {/* Buffer & Tolls */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800">
               <div>
-                <span className="block text-xs font-medium text-slate-700 mb-1.5">
+                <span className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                   เผื่อน้ำมันสำรอง / รถติด
                 </span>
                 <div className="grid grid-cols-4 gap-1.5">
@@ -690,8 +728,8 @@ export function TripPlannerSection({
                       onClick={() => setBufferPercent(pct)}
                       className={`min-h-[38px] rounded-lg border font-mono text-xs tabular-nums transition-colors cursor-pointer ${
                         bufferPercent === pct
-                          ? 'border-slate-900 bg-slate-900 text-white font-semibold'
-                          : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                          ? 'border-slate-900 dark:border-blue-500 bg-slate-900 dark:bg-blue-600 text-white font-semibold'
+                          : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
                       }`}
                     >
                       +{pct}%
@@ -703,7 +741,7 @@ export function TripPlannerSection({
               <div>
                 <label
                   htmlFor="trip-extra-cost"
-                  className="block text-xs font-medium text-slate-700 mb-1.5"
+                  className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5"
                 >
                   ค่าทางด่วน / ค่าจอดรถเพิ่มเติม (บาท)
                 </label>
@@ -714,16 +752,16 @@ export function TripPlannerSection({
                   step="10"
                   value={extraCostInput}
                   onChange={(e) => setExtraCostInput(e.target.value)}
-                  className="w-full min-h-[38px] px-3 py-2 rounded-lg border border-slate-300 font-mono text-sm tabular-nums text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  className="w-full min-h-[38px] px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-mono text-sm tabular-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
             </div>
           </div>
 
           {/* Right: Live Estimate Results */}
-          <div className="lg:col-span-6 p-5 sm:p-6 bg-slate-50/50 flex flex-col justify-between gap-4">
+          <div className="lg:col-span-6 p-5 sm:p-6 bg-slate-50/50 dark:bg-slate-950/40 flex flex-col justify-between gap-4">
             {/* Dark Hero Cost Summary */}
-            <div className="rounded-xl bg-slate-900 text-white p-5 space-y-4">
+            <div className="rounded-xl bg-slate-900 dark:bg-slate-950 dark:border dark:border-slate-800 text-white p-5 space-y-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-xs text-slate-300">
@@ -776,21 +814,21 @@ export function TripPlannerSection({
             </div>
 
             {/* Current Tank & Refill Readiness */}
-            <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <Fuel className="w-4 h-4 text-amber-600 shrink-0" aria-hidden="true" />
-                  <h3 className="text-sm font-semibold text-slate-900">
+                  <Fuel className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" aria-hidden="true" />
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                     ความพร้อมของน้ำมันในถังปัจจุบัน
                   </h3>
                 </div>
-                <span className="font-mono text-xs tabular-nums text-slate-600">
+                <span className="font-mono text-xs tabular-nums text-slate-600 dark:text-slate-300">
                   {fuelPercent}% (~{estimate.currentTankLiters.toFixed(1)} / {tankCapacityLiters} ล.)
                 </span>
               </div>
 
               <div className="space-y-1">
-                <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                <div className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                   <div
                     className={`h-full transition-all duration-200 ${
                       estimate.canCompleteWithCurrentFuel ? 'bg-emerald-600' : 'bg-amber-500'
@@ -798,22 +836,22 @@ export function TripPlannerSection({
                     style={{ width: `${tankCoverageRatio}%` }}
                   />
                 </div>
-                <div className="flex items-center justify-between text-[11px] text-slate-500 font-mono tabular-nums">
+                <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 font-mono tabular-nums">
                   <span>วิ่งได้ก่อนถึงขีดสำรอง ~{formatKm(estimate.estimatedCurrentRangeKm)} กม.</span>
                   <span>ทริป {formatKm(estimate.totalDistanceKm)} กม.</span>
                 </div>
               </div>
 
               {estimate.canCompleteWithCurrentFuel ? (
-                <div className="flex items-start gap-2 text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" aria-hidden="true" />
+                <div className="flex items-start gap-2 text-xs text-emerald-800 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-lg px-3 py-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-700 dark:text-emerald-400 shrink-0 mt-0.5" aria-hidden="true" />
                   <span>
                     น้ำมันในถังปัจจุบันเพียงพอสำหรับทริปนี้โดยเหลือน้ำมันสำรองในถังอย่างน้อย ~10 ลิตร
                   </span>
                 </div>
               ) : (
-                <div className="flex items-start gap-2 text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" aria-hidden="true" />
+                <div className="flex items-start gap-2 text-xs text-amber-900 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-lg px-3 py-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-700 dark:text-amber-400 shrink-0 mt-0.5" aria-hidden="true" />
                   <span>
                     ต้องเติมเพิ่มระหว่างทางอย่างน้อย{' '}
                     <strong className="font-mono tabular-nums">
@@ -832,9 +870,9 @@ export function TripPlannerSection({
                 type="button"
                 onClick={handleFindNearbyStations}
                 disabled={stationsLoading}
-                className="w-full inline-flex items-center justify-center gap-2 min-h-[38px] px-3.5 py-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 disabled:opacity-60 text-slate-800 text-xs font-medium transition-colors cursor-pointer"
+                className="w-full inline-flex items-center justify-center gap-2 min-h-[38px] px-3.5 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-60 text-slate-800 dark:text-slate-100 text-xs font-medium transition-colors cursor-pointer"
               >
-                <Navigation className="w-3.5 h-3.5 text-blue-700 shrink-0" aria-hidden="true" />
+                <Navigation className="w-3.5 h-3.5 text-blue-700 dark:text-blue-400 shrink-0" aria-hidden="true" />
                 <span>
                   {estimate.canCompleteWithCurrentFuel
                     ? 'ดูปั๊มน้ำมันใกล้เคียงและตลอดเส้นทางบนแผนที่'
@@ -844,23 +882,23 @@ export function TripPlannerSection({
             </div>
 
             {/* Maintenance Milestone Impact */}
-            <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-2.5">
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-2.5">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <Wrench className="w-4 h-4 text-slate-700 shrink-0" aria-hidden="true" />
-                  <h3 className="text-sm font-semibold text-slate-900">
+                  <Wrench className="w-4 h-4 text-slate-700 dark:text-slate-300 shrink-0" aria-hidden="true" />
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                     เช็กกำหนดซ่อมบำรุงตลอดทริป
                   </h3>
                 </div>
-                <span className="inline-flex items-center gap-1 font-mono text-xs tabular-nums text-slate-600">
+                <span className="inline-flex items-center gap-1 font-mono text-xs tabular-nums text-slate-600 dark:text-slate-300">
                   <Gauge className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
                   ไมล์หลังจบทริป ~{formatKm(estimate.projectedEndOdometer)} กม.
                 </span>
               </div>
 
               {maintenanceImpacts.length === 0 ? (
-                <p className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" aria-hidden="true" />
+                <p className="text-xs text-emerald-800 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-lg px-3 py-2 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-700 dark:text-emerald-400 shrink-0" aria-hidden="true" />
                   <span>ทุกรายการซ่อมบำรุงยังมีระยะคงเหลือเพียงพอสำหรับทริปนี้</span>
                 </p>
               ) : (
@@ -870,8 +908,8 @@ export function TripPlannerSection({
                       key={impact.key}
                       className={`text-xs rounded-lg px-3 py-2 border flex items-center justify-between gap-2 ${
                         impact.becomesOverdueDuringTrip
-                          ? 'bg-red-50 border-red-200 text-red-900'
-                          : 'bg-amber-50 border-amber-200 text-amber-900'
+                          ? 'bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-800/60 text-red-900 dark:text-red-200'
+                          : 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800/60 text-amber-900 dark:text-amber-200'
                       }`}
                     >
                       <span className="font-medium">{impact.label}</span>
@@ -891,18 +929,20 @@ export function TripPlannerSection({
         {stationsPanelOpen && (
           <>
             {geolocationDenied && stationsError && (
-              <div className="border-t border-slate-200 bg-amber-50/70 px-5 py-3 flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-xs text-amber-900">
-                  <Compass className="w-4 h-4 text-amber-700 shrink-0" aria-hidden="true" />
+              <div className="border-t border-slate-200 dark:border-slate-800 bg-amber-50/70 dark:bg-amber-950/30 px-5 py-3 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-xs text-amber-900 dark:text-amber-200">
+                  <Compass className="w-4 h-4 text-amber-700 dark:text-amber-400 shrink-0" aria-hidden="true" />
                   <span>ต้องการดูตัวอย่างเส้นทางและจุดแวะเติมน้ำมันในแผนที่?</span>
                 </div>
                 <button
                   type="button"
-                  onClick={handleSearchFromBangkokFallback}
+                  onClick={handleSearchFromPresetOrBangkokFallback}
                   data-testid="fallback-bangkok-search-btn"
-                  className="px-3.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-medium cursor-pointer"
+                  className="px-3.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 dark:bg-blue-600 dark:hover:bg-blue-500 text-white text-xs font-medium cursor-pointer"
                 >
-                  ใช้จุดเริ่มต้นกรุงเทพฯ ค้นหาปั๊มตามเส้นทาง
+                  {activePreset?.originCoords
+                    ? `ใช้จุดเริ่มต้น ${activePreset.origin} ค้นหาปั๊มตามเส้นทาง`
+                    : 'ใช้จุดเริ่มต้นกรุงเทพฯ ค้นหาปั๊มตามเส้นทาง'}
                 </button>
               </div>
             )}
@@ -929,21 +969,21 @@ export function TripPlannerSection({
       {/* 12-Month Fuel Cost Projection BarChart */}
       <div
         data-testid="annual-fuel-forecast-chart"
-        className="bg-white border border-slate-200 rounded-xl p-5 sm:p-6 space-y-4"
+        className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 sm:p-6 space-y-4"
       >
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           <div>
-            <h3 className="font-display text-base sm:text-lg font-semibold text-slate-900 flex items-center gap-2">
-              <BarChart3 className="w-5 h-5 text-emerald-700 shrink-0" aria-hidden="true" />
+            <h3 className="font-display text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 text-emerald-700 dark:text-emerald-400 shrink-0" aria-hidden="true" />
               <span>คาดการณ์ค่าน้ำมันล่วงหน้า 12 เดือน</span>
             </h3>
-            <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
               อิงระยะทางเฉลี่ย{' '}
-              <strong className="font-mono tabular-nums text-slate-800">
+              <strong className="font-mono tabular-nums text-slate-800 dark:text-slate-200">
                 ~{formatKm(annualForecast.historicalMonthlyKm)} กม./เดือน
               </strong>{' '}
               ({annualForecast.effectiveKml.toFixed(2)} กม./ล.) · งบรวม 12 เดือน{' '}
-              <strong className="font-mono tabular-nums text-emerald-700">
+              <strong className="font-mono tabular-nums text-emerald-700 dark:text-emerald-400">
                 ~{formatBaht(annualForecast.totalAnnualCostBaht)} บาท
               </strong>{' '}
               (เฉลี่ย {formatBaht(annualForecast.averageMonthlyCostBaht)} บ./เดือน)
@@ -953,7 +993,7 @@ export function TripPlannerSection({
           <div
             role="group"
             aria-label="สมมติฐานแนวโน้มราคาน้ำมัน 12 เดือน"
-            className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-lg self-start lg:self-auto"
+            className="inline-flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg self-start lg:self-auto"
           >
             <button
               type="button"
@@ -962,8 +1002,8 @@ export function TripPlannerSection({
               data-testid="forecast-mode-auto"
               className={`px-3 py-1.5 min-h-[34px] rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                 forecastTrendMode === 'auto'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               ตามแนวโน้มราคาจริง
@@ -975,8 +1015,8 @@ export function TripPlannerSection({
               data-testid="forecast-mode-steady"
               className={`px-3 py-1.5 min-h-[34px] rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                 forecastTrendMode === 'steady'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               ราคาคงที่
@@ -988,8 +1028,8 @@ export function TripPlannerSection({
               data-testid="forecast-mode-rising"
               className={`px-3 py-1.5 min-h-[34px] rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                 forecastTrendMode === 'rising'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               เผื่อราคาขึ้น
@@ -1003,35 +1043,39 @@ export function TripPlannerSection({
               data={annualForecast.points}
               margin={{ top: 18, right: 20, left: 6, bottom: 4 }}
             >
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+              <CartesianGrid
+                strokeDasharray="3 3"
+                vertical={false}
+                stroke={isDark ? '#1e293b' : '#e2e8f0'}
+              />
               <XAxis
                 dataKey="shortLabel"
-                tick={{ fill: '#475569', fontSize: 11 }}
-                axisLine={{ stroke: '#cbd5e1' }}
+                tick={{ fill: isDark ? '#94a3b8' : '#475569', fontSize: 11 }}
+                axisLine={{ stroke: isDark ? '#334155' : '#cbd5e1' }}
                 tickLine={false}
                 interval={0}
               />
               <YAxis
                 domain={[forecastYMin, forecastYMax]}
                 tickFormatter={(val: number) => formatBaht(val)}
-                tick={{ fill: '#64748b', fontSize: 11 }}
+                tick={{ fill: isDark ? '#94a3b8' : '#64748b', fontSize: 11 }}
                 axisLine={false}
                 tickLine={false}
                 width={56}
               />
               <Tooltip
                 content={<CustomAnnualFuelTooltip />}
-                cursor={{ fill: 'rgba(148, 163, 184, 0.12)' }}
+                cursor={{ fill: isDark ? 'rgba(148, 163, 184, 0.08)' : 'rgba(148, 163, 184, 0.12)' }}
               />
               {annualForecast.averageMonthlyCostBaht > 0 && (
                 <ReferenceLine
                   y={annualForecast.averageMonthlyCostBaht}
-                  stroke="#64748b"
+                  stroke={isDark ? '#94a3b8' : '#64748b'}
                   strokeDasharray="4 4"
                   label={{
                     value: `เฉลี่ย ${formatBaht(annualForecast.averageMonthlyCostBaht)} บ.`,
                     position: 'insideTopRight',
-                    fill: '#475569',
+                    fill: isDark ? '#cbd5e1' : '#475569',
                     fontSize: 11,
                   }}
                 />
@@ -1061,7 +1105,7 @@ export function TripPlannerSection({
           </ResponsiveContainer>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs text-slate-500">
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400">
           <span className="font-mono tabular-nums">
             แนวโน้มราคาน้ำมัน:{' '}
             {annualForecast.priceTrendDirection === 'up'

@@ -24,6 +24,8 @@ export interface TripPresetRoute {
   origin: string;
   destination: string;
   destinationQuery: string;
+  originCoords?: LatLngPoint;
+  destinationCoords?: LatLngPoint;
   oneWayKm: number;
   note: string;
 }
@@ -37,6 +39,17 @@ export const TRIP_PRESET_ROUTES: TripPresetRoute[] = [
     destinationQuery: 'พัทยา ชลบุรี ประเทศไทย',
     oneWayKm: 150,
     note: 'มอเตอร์เวย์สาย 7 ขับขี่ทางไกล',
+  },
+  {
+    id: 'siamcc-nayaiam',
+    label: 'Siam CC บางนา – นายายอาม',
+    origin: 'Siam Country Club Bangkok (บางนา-ตราด)',
+    destination: 'ต.ช้างข้าม อ.นายายอาม (จันทบุรี)',
+    destinationQuery: 'ช้างข้าม อำเภอนายายอาม จันทบุรี ประเทศไทย',
+    originCoords: { lat: 13.6143643, lng: 100.7913915 },
+    destinationCoords: { lat: 12.7550739, lng: 101.8605464 },
+    oneWayKm: 174,
+    note: 'จาก Siam Country Club Bangkok (ถ.บางนา-ตราด อ.บางเสาธง) → ต.ช้างข้าม อ.นายายอาม จ.จันทบุรี (~174 กม.)',
   },
   {
     id: 'bkk-khaoyai',
