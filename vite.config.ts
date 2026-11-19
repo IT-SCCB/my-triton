@@ -7,6 +7,11 @@ export default defineConfig(() => {
   return {
     base: process.env.VITE_PAGES_BUILD === 'true' ? '/my-triton/' : '/',
     plugins: [react(), tailwindcss()],
+    define: {
+      'import.meta.env.VITE_APP_COMMIT_SHA': JSON.stringify(
+        process.env.VITE_APP_COMMIT_SHA || process.env.GITHUB_SHA || ''
+      ),
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

@@ -48,6 +48,7 @@ jobs:
         run: npm run build
         env:
           VITE_PAGES_BUILD: 'true'
+          VITE_APP_COMMIT_SHA: ${{ github.sha }}
           VITE_GAS_WEBHOOK_URL: ${{ secrets.VITE_GAS_WEBHOOK_URL }}
           # Secret นี้ตั้งหรือไม่ตั้งก็ได้ — ไม่มี secret build ก็ผ่าน
           VITE_GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY }}

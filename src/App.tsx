@@ -5,6 +5,7 @@ import { AiAssistantDrawer } from './components/AiAssistantDrawer';
 import { AnalyticsSection } from './components/AnalyticsSection';
 import { FuelFormModal } from './components/FuelFormModal';
 import { FuelHistorySection } from './components/FuelHistorySection';
+import { GitHubSyncStatus } from './components/GitHubSyncStatus';
 import { GoogleDriveModal } from './components/GoogleDriveModal';
 import { GoogleSheetsSyncModal } from './components/GoogleSheetsSyncModal';
 import { MaintenanceAlertToast } from './components/MaintenanceAlertToast';
@@ -1557,10 +1558,14 @@ export default function App() {
       </main>
 
       <footer className="border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 mt-12 transition-colors duration-200">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
-          <p>
-            สมุดบันทึกอ้วนพี ({state.vehicle.make} {state.vehicle.model} {state.vehicle.engineSpec}) · อัปเดตล่าสุด {formatThaiDate(state.vehicle.lastUpdatedDate, 'full')}
-          </p>
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-5 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 sm:gap-3">
+            <p>
+              สมุดบันทึกอ้วนพี ({state.vehicle.make} {state.vehicle.model} {state.vehicle.engineSpec}) · อัปเดตล่าสุด {formatThaiDate(state.vehicle.lastUpdatedDate, 'full')}
+            </p>
+            <span className="hidden sm:inline text-slate-300 dark:text-slate-700" aria-hidden="true">|</span>
+            <GitHubSyncStatus />
+          </div>
 
           <div>
             {confirmReset ? (
