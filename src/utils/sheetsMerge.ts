@@ -334,6 +334,11 @@ export function mergeSheetsPayloadIntoState(
   next.services = Array.isArray(next.services) ? next.services : [];
   next.odometerLogs = Array.isArray(next.odometerLogs) ? next.odometerLogs : [];
   next.scheduleIntervals = next.scheduleIntervals ?? { ...currentState.scheduleIntervals };
+  next.legalDocuments = Array.isArray(next.legalDocuments)
+    ? next.legalDocuments
+    : Array.isArray(currentState.legalDocuments)
+      ? structuredClone(currentState.legalDocuments)
+      : [];
 
   const previousOdometer = next.vehicle.currentOdometer;
   let highestOdometer = previousOdometer;

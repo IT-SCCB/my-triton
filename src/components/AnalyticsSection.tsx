@@ -1,9 +1,12 @@
 import { useState } from 'react';
-import { Activity, AlertTriangle, Calendar, Gauge, PieChart, TrendingUp } from 'lucide-react';
+import { Activity, AlertTriangle, Calendar, Fuel, Gauge, PieChart, TrendingUp } from 'lucide-react';
 import {
   Area,
   AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
+  Cell,
   Line,
   LineChart,
   ReferenceLine,
@@ -15,6 +18,7 @@ import {
 import type {
   CostSummary,
   FuelLogEntry,
+  MonthlyFuelCostTrendPoint,
   MonthlyMaintenanceTrendPoint,
   MonthlyOdometerPoint,
   OdometerLogEntry,
@@ -22,6 +26,7 @@ import type {
   ServiceRecord,
 } from '../types/maintenance';
 import {
+  computeFuelCostTrend,
   computeFuelKmlFromFormula,
   computeMaintenanceCostTrend,
   computeMonthlyOdometerSummary,
@@ -233,6 +238,81 @@ function CustomTrendTooltip({ active, payload }: TrendTooltipProps) {
       {item.isSpike && (
         <p className="text-[11px] font-medium text-amber-300">
           จุดพีคค่าใช้จ่ายสูงกว่าค่าเฉลี่ยรายเดือน
+        </p>
+      )}
+    </div>
+  );
+}
+
+interface FuelCostTooltipProps {
+  active?: boolean;
+  payload?: Array<{
+    payload: MonthlyFuelCostTrendPoint;
+  }>;
+}
+
+function CustomFuelCostTooltip({ active, payload }: FuelCostTooltipProps) {
+  if (!active || !payload || payload.length === 0) return null;
+  const item = payload[0].payload;
+
+  const deltaText =
+    item.momDelta === null
+      ? 'เดือนแรกของช่วง'
+      : item.momDelta === 0
+        ? 'เท่ากับเดือนก่อน'
+        : `${item.momDelta > 0 ? '+' : ''}${formatBaht(item.momDelta)} บาท${
+            item.momPercent !== null
+              ? ` (${item.momPercent > 0 ? '+' : ''}${item.momPercent}%)`
+              : ''
+          }`;
+
+  return (
+    <div className="bg-slate-900 text-white rounded-lg px-3.5 py-2.5 shadow-lg border border-slate-800 text-xs space-y-1.5 min-w-[230px]">
+      <div className="flex items-center justify-between gap-4 border-b border-slate-700 pb-1">
+        <span className="font-semibold text-white">{item.monthLabel}</span>
+        <span className="text-slate-300 font-mono tabular-nums">
+          เติม {item.refillCount} ครั้ง
+        </span>
+      </div>
+
+      <div className="flex items-center justify-between gap-4">
+        <span className="text-slate-300">ค่าน้ำมันรวม</span>
+        <span
+          className={`font-mono font-bold tabular-nums ${
+            item.isPeakMonth ? 'text-amber-300' : 'text-emerald-300'
+          }`}
+        >
+          {formatBaht(item.totalCost)} บาท
+        </span>
+      </div>
+
+      {item.totalLiters > 0 && (
+        <div className="flex items-center justify-between gap-4">
+          <span className="text-slate-300">ปริมาณ / เฉลี่ย</span>
+          <span className="font-mono text-slate-100 tabular-nums">
+            {item.totalLiters.toFixed(1)} ล. ({item.avgPricePerLiter.toFixed(2)} บ./ล.)
+          </span>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between gap-4">
+        <span className="text-slate-300">เทียบเดือนก่อน (MoM)</span>
+        <span
+          className={`font-mono font-semibold tabular-nums ${
+            item.momDelta !== null && item.momDelta > 0
+              ? 'text-amber-300'
+              : item.momDelta !== null && item.momDelta < 0
+                ? 'text-emerald-300'
+                : 'text-slate-300'
+          }`}
+        >
+          {deltaText}
+        </span>
+      </div>
+
+      {item.isPeakMonth && (
+        <p className="text-[11px] font-medium text-amber-300 border-t border-slate-700 pt-1">
+          เดือนที่มียอดเติมน้ำมันสูงสุดในช่วงนี้
         </p>
       )}
     </div>
@@ -495,6 +575,7 @@ export function AnalyticsSection({
   const [showOutliers, setShowOutliers] = useState(false);
   const [fuelRange, setFuelRange] = useState<'recent' | 'all'>('recent');
   const [selectedLogId, setSelectedLogId] = useState<string | null>(null);
+  const [fuelCostRange, setFuelCostRange] = useState<'12m' | '6m'>('12m');
   const [trendRange, setTrendRange] = useState<'12m' | '6m'>('12m');
   const [odometerRange, setOdometerRange] = useState<'all' | '90d' | '30d'>('all');
   const [monthlyOdoMetric, setMonthlyOdoMetric] = useState<'reading' | 'distance'>('reading');
@@ -541,6 +622,12 @@ export function AnalyticsSection({
     kmlValues.length > 0 ? Math.max(0, Math.floor(Math.min(...kmlValues) - 1)) : 0;
   const yDomainMax =
     kmlValues.length > 0 ? Math.ceil(Math.max(...kmlValues) + 2) : 20;
+
+  const fuelCostTrend = computeFuelCostTrend(
+    fuelLogs,
+    undefined,
+    fuelCostRange === '12m' ? 12 : 6
+  );
 
   const trend = computeMaintenanceCostTrend(
     services,
@@ -856,6 +943,164 @@ export function AnalyticsSection({
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Month-over-Month Fuel Cost Trend (Recharts BarChart) */}
+      <div
+        data-testid="fuel-cost-trend-chart"
+        className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 sm:p-6 space-y-4 transition-colors"
+      >
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div>
+            <h2 className="font-display text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <Fuel className="w-5 h-5 text-emerald-700 dark:text-emerald-400 shrink-0" aria-hidden="true" />
+              <span>แนวโน้มค่าน้ำมันเชื้อเพลิงรายเดือน (MoM)</span>
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+              ยอดรวม{' '}
+              <strong className="font-mono tabular-nums text-slate-800 dark:text-slate-200">
+                {formatBaht(fuelCostTrend.totalPeriodCost)} บาท
+              </strong>{' '}
+              · เฉลี่ย/เดือน{' '}
+              <strong className="font-mono tabular-nums text-emerald-700 dark:text-emerald-400">
+                {formatBaht(fuelCostTrend.monthlyAverage)} บาท
+              </strong>
+              {fuelCostTrend.peakMonth && (
+                <>
+                  {' '}
+                  · เดือนสูงสุด{' '}
+                  <strong className="font-mono tabular-nums text-amber-700 dark:text-amber-400">
+                    {fuelCostTrend.peakMonth.monthLabel} ({formatBaht(fuelCostTrend.peakMonth.totalCost)} บ.)
+                  </strong>
+                </>
+              )}
+            </p>
+          </div>
+
+          <div
+            role="group"
+            aria-label="ช่วงเวลาย้อนหลังของกราฟค่าน้ำมันรายเดือน"
+            className="inline-flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg self-start lg:self-auto"
+          >
+            <button
+              type="button"
+              onClick={() => setFuelCostRange('6m')}
+              aria-pressed={fuelCostRange === '6m'}
+              data-testid="fuel-cost-range-6m"
+              className={`px-3 py-1.5 min-h-[34px] rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                fuelCostRange === '6m'
+                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+              }`}
+            >
+              6 เดือนล่าสุด
+            </button>
+            <button
+              type="button"
+              onClick={() => setFuelCostRange('12m')}
+              aria-pressed={fuelCostRange === '12m'}
+              data-testid="fuel-cost-range-12m"
+              className={`px-3 py-1.5 min-h-[34px] rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                fuelCostRange === '12m'
+                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+              }`}
+            >
+              12 เดือนล่าสุด
+            </button>
+          </div>
+        </div>
+
+        {fuelCostTrend.totalPeriodCost === 0 ? (
+          <div className="h-56 flex items-center justify-center border border-dashed border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-500 dark:text-slate-400">
+            ยังไม่มีรายการเติมน้ำมันในช่วง {fuelCostRange === '12m' ? '12' : '6'} เดือนล่าสุด
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="w-full h-64 sm:h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={fuelCostTrend.points}
+                  margin={{ top: 18, right: 24, left: 8, bottom: 4 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridStroke} />
+                  <XAxis
+                    dataKey="shortLabel"
+                    tick={{ fill: primaryTickColor, fontSize: 11 }}
+                    axisLine={{ stroke: axisLineStroke }}
+                    tickLine={false}
+                    interval={0}
+                  />
+                  <YAxis
+                    tickFormatter={(val: number) => formatBaht(val)}
+                    tick={{ fill: tickColor, fontSize: 11 }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={56}
+                  />
+                  <Tooltip
+                    content={<CustomFuelCostTooltip />}
+                    cursor={{ fill: isDark ? 'rgba(148, 163, 184, 0.08)' : 'rgba(15, 23, 42, 0.04)' }}
+                  />
+                  {fuelCostTrend.monthlyAverage > 0 && (
+                    <ReferenceLine
+                      y={fuelCostTrend.monthlyAverage}
+                      stroke={refLineStroke}
+                      strokeDasharray="4 4"
+                      label={{
+                        value: `เฉลี่ย ${formatBaht(fuelCostTrend.monthlyAverage)} บ.`,
+                        position: 'insideTopLeft',
+                        fill: refLabelColor,
+                        fontSize: 11,
+                      }}
+                    />
+                  )}
+                  <Bar
+                    dataKey="totalCost"
+                    name="ค่าน้ำมันรายเดือน (บาท)"
+                    radius={[5, 5, 0, 0]}
+                    maxBarSize={44}
+                    animationDuration={200}
+                  >
+                    {fuelCostTrend.points.map((entry) => (
+                      <Cell
+                        key={`fuel-cost-bar-${entry.monthKey}`}
+                        fill={
+                          entry.isPeakMonth
+                            ? isDark
+                              ? '#f59e0b'
+                              : '#d97706'
+                            : entry.totalCost > 0
+                              ? fuelLineStroke
+                              : isDark
+                                ? '#334155'
+                                : '#cbd5e1'
+                        }
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400">
+              <div className="flex flex-wrap items-center gap-4">
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-sm bg-emerald-600 dark:bg-emerald-500 shrink-0" aria-hidden="true" />
+                  <span>ค่าน้ำมันรายเดือน</span>
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-sm bg-amber-600 dark:bg-amber-500 shrink-0" aria-hidden="true" />
+                  <span>เดือนที่ใช้จ่ายน้ำมันสูงสุด</span>
+                </span>
+              </div>
+              <span className="font-mono tabular-nums text-slate-500 dark:text-slate-400">
+                มีเติมน้ำมัน {fuelCostTrend.activeMonthCount} จาก {fuelCostTrend.points.length} เดือน · รวม{' '}
+                {fuelCostTrend.totalPeriodLiters.toFixed(1)} ลิตร
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Month-over-Month Maintenance Cost Trend (Recharts) */}

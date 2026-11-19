@@ -355,6 +355,110 @@
         "createdAt",
         "updatedAt"
       ]
+    },
+    "LegalDocuments": {
+      "title": "LegalDocuments",
+      "description": "Car insurance (compulsory/voluntary), annual registration/tax, and vehicle legal documents with expiration alert settings and compressed document photo.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "vehicleId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "docType": {
+          "type": "string",
+          "enum": [
+            "compulsory_insurance",
+            "voluntary_insurance",
+            "registration_tax",
+            "other"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "provider": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "policyNumber": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "issueDate": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "expiryDate": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "alertDaysBefore": {
+          "type": "integer"
+        },
+        "alertEnabled": {
+          "type": "boolean"
+        },
+        "cost": {
+          "type": "number"
+        },
+        "emergencyPhone": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "imageDataUrl": {
+          "type": "string",
+          "maxLength": 450000
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "ownerId",
+        "vehicleId",
+        "docType",
+        "title",
+        "provider",
+        "policyNumber",
+        "issueDate",
+        "expiryDate",
+        "alertDaysBefore",
+        "alertEnabled",
+        "cost",
+        "createdAt",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -381,6 +485,12 @@
         "$ref": "#/entities/OdometerLogEntry"
       },
       "description": "Odometer log checkpoints subcollection for a vehicle."
+    },
+    "/users/{userId}/vehicles/{vehicleId}/legalDocuments/{legalDocId}": {
+      "schema": {
+        "$ref": "#/entities/LegalDocuments"
+      },
+      "description": "Vehicle insurance, compulsory insurance (Por Ror Bor), and annual registration/tax records."
     }
   }
 }

@@ -16,6 +16,7 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { SEED_VEHICLE_STATE } from './src/data/seedData.ts';
 import type {
   FuelLogEntry,
+  LegalDocuments,
   OcrExtractedFuelData,
   OdometerLogEntry,
   ServiceRecord,
@@ -147,7 +148,10 @@ async function readState(): Promise<VehicleMaintenanceState> {
       Array.isArray(parsed.services) &&
       Array.isArray(parsed.fuelLogs)
     ) {
-      return parsed;
+      return {
+        ...parsed,
+        legalDocuments: Array.isArray(parsed.legalDocuments) ? parsed.legalDocuments : [],
+      };
     }
   } catch {
     // Initialize from deterministic seed on first run or schema upgrade
@@ -565,6 +569,118 @@ async function startServer() {
     }
   });
 
+  app.post('/api/legal-documents', async (req, res) => {
+    try {
+      const payload = req.body as Partial<LegalDocuments>;
+      if (!payload.title?.trim() || !payload.expiryDate || !payload.issueDate) {
+        res.status(400).json({ error: 'กรุณาระบุชื่อเอกสาร วันที่เริ่มต้น และวันหมดอายุให้ครบถ้วน' });
+        return;
+      }
+
+      const newDoc: LegalDocuments = {
+        id: payload.id?.trim() || `doc-${Date.now()}`,
+        docType: payload.docType ?? 'other',
+        title: payload.title.trim().slice(0, 200),
+        provider: (payload.provider ?? '').trim().slice(0, 200),
+        policyNumber: (payload.policyNumber ?? '').trim().slice(0, 120),
+        issueDate: payload.issueDate,
+        expiryDate: payload.expiryDate,
+        alertDaysBefore: Math.max(0, Math.min(365, Math.round(Number(payload.alertDaysBefore ?? 30)))),
+        alertEnabled: payload.alertEnabled ?? true,
+        cost: Math.max(0, Number(payload.cost ?? 0)),
+        emergencyPhone: payload.emergencyPhone?.trim() || undefined,
+        imageDataUrl: payload.imageDataUrl?.trim() || undefined,
+        notes: payload.notes?.trim() || undefined,
+        updatedAt: new Date().toISOString(),
+      };
+
+      const state = await readState();
+      const existingDocs = Array.isArray(state.legalDocuments) ? state.legalDocuments : [];
+      state.legalDocuments = [newDoc, ...existingDocs].sort((a, b) =>
+        a.expiryDate.localeCompare(b.expiryDate)
+      );
+      await writeState(state);
+      res.json(state);
+    } catch (error) {
+      console.error('Failed to create legal document:', error);
+      res.status(500).json({ error: 'ไม่สามารถบันทึกข้อมูล พ.ร.บ. / ประกัน / ทะเบียนรถได้' });
+    }
+  });
+
+  app.patch('/api/legal-documents/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const payload = req.body as Partial<LegalDocuments>;
+      const state = await readState();
+      const existingDocs = Array.isArray(state.legalDocuments) ? state.legalDocuments : [];
+      const index = existingDocs.findIndex((d) => d.id === id);
+      if (index === -1) {
+        res.status(404).json({ error: 'ไม่พบเอกสารที่ต้องการแก้ไข' });
+        return;
+      }
+
+      const existing = existingDocs[index];
+      const updated: LegalDocuments = {
+        ...existing,
+        docType: payload.docType ?? existing.docType,
+        title: payload.title !== undefined ? payload.title.trim().slice(0, 200) : existing.title,
+        provider: payload.provider !== undefined ? payload.provider.trim().slice(0, 200) : existing.provider,
+        policyNumber:
+          payload.policyNumber !== undefined
+            ? payload.policyNumber.trim().slice(0, 120)
+            : existing.policyNumber,
+        issueDate: payload.issueDate ?? existing.issueDate,
+        expiryDate: payload.expiryDate ?? existing.expiryDate,
+        alertDaysBefore:
+          payload.alertDaysBefore !== undefined
+            ? Math.max(0, Math.min(365, Math.round(Number(payload.alertDaysBefore))))
+            : existing.alertDaysBefore,
+        alertEnabled:
+          payload.alertEnabled !== undefined ? Boolean(payload.alertEnabled) : existing.alertEnabled,
+        cost: payload.cost !== undefined ? Math.max(0, Number(payload.cost)) : existing.cost,
+        emergencyPhone:
+          payload.emergencyPhone !== undefined
+            ? payload.emergencyPhone.trim() || undefined
+            : existing.emergencyPhone,
+        imageDataUrl:
+          payload.imageDataUrl !== undefined
+            ? payload.imageDataUrl.trim() || undefined
+            : existing.imageDataUrl,
+        notes: payload.notes !== undefined ? payload.notes.trim() || undefined : existing.notes,
+        updatedAt: new Date().toISOString(),
+      };
+
+      existingDocs[index] = updated;
+      state.legalDocuments = [...existingDocs].sort((a, b) =>
+        a.expiryDate.localeCompare(b.expiryDate)
+      );
+      await writeState(state);
+      res.json(state);
+    } catch (error) {
+      console.error('Failed to update legal document:', error);
+      res.status(500).json({ error: 'ไม่สามารถแก้ไขข้อมูลเอกสารได้' });
+    }
+  });
+
+  app.delete('/api/legal-documents/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const state = await readState();
+      const existingDocs = Array.isArray(state.legalDocuments) ? state.legalDocuments : [];
+      const nextDocs = existingDocs.filter((d) => d.id !== id);
+      if (nextDocs.length === existingDocs.length) {
+        res.status(404).json({ error: 'ไม่พบเอกสารที่ต้องการลบ' });
+        return;
+      }
+      state.legalDocuments = nextDocs;
+      await writeState(state);
+      res.json(state);
+    } catch (error) {
+      console.error('Failed to delete legal document:', error);
+      res.status(500).json({ error: 'ไม่สามารถลบเอกสารได้' });
+    }
+  });
+
   app.post('/api/sync-import', async (req, res) => {
     try {
       const current = await readState();
@@ -849,9 +965,16 @@ async function startServer() {
       )
       .join('\n');
 
+    const legalDocsText = (vehicleState.legalDocuments ?? [])
+      .map(
+        (d) =>
+          `- ${d.title} (${d.docType}): หน่วยงาน/บริษัท ${d.provider || '-'}, เลขที่ ${d.policyNumber || '-'}, เริ่ม ${d.issueDate} หมดอายุ ${d.expiryDate}, แจ้งเตือนล่วงหน้า ${d.alertDaysBefore} วัน (${d.alertEnabled ? 'เปิด' : 'ปิด'})`
+      )
+      .join('\n');
+
     return [
       `คุณคือ "ผู้ช่วยช่างและวางแผนทริปประจำรถอ้วนพี" สำหรับรถกระบะ ${vehicleState.vehicle.make} ${vehicleState.vehicle.model} ปี ${vehicleState.vehicle.year} (${vehicleState.vehicle.engineSpec})`,
-      'หน้าที่ของคุณคือตอบคำถามเรื่องการบำรุงรักษารถยนต์ การวางแผนเดินทาง คำนวณค่าน้ำมัน การเช็กรายการอะไหล่ตามระยะไมล์ และคำแนะนำด้านเทคนิคของเครื่องยนต์ดีเซล 2.5 DI-D อย่างเป็นกันเอง ชัดเจน และแม่นยำเป็นภาษาไทย',
+      'หน้าที่ของคุณคือตอบคำถามเรื่องการบำรุงรักษารถยนต์ การวางแผนเดินทาง คำนวณค่าน้ำมัน การเช็กรายการอะไหล่ตามระยะไมล์ เอกสาร พ.ร.บ. ประกันภัย ทะเบียน/ภาษีรถยนต์ และคำแนะนำด้านเทคนิคของเครื่องยนต์ดีเซล 2.5 DI-D อย่างเป็นกันเอง ชัดเจน และแม่นยำเป็นภาษาไทย',
       '',
       'ข้อมูลรถล่าสุดจากสมุดบันทึก:',
       `- เลขไมล์ปัจจุบัน: ${vehicleState.vehicle.currentOdometer.toLocaleString('th-TH')} กม. (อัปเดต ${vehicleState.vehicle.lastUpdatedDate})`,
@@ -861,13 +984,16 @@ async function startServer() {
       'ตารางซ่อมบำรุงตามระยะที่กำลังติดตาม:',
       schedulesText,
       '',
+      'เอกสาร พ.ร.บ. / ประกันภัย / ทะเบียนรถ:',
+      legalDocsText || '- ยังไม่มีเอกสารที่บันทึกไว้',
+      '',
       'ประวัติเซอร์วิสล่าสุด:',
       servicesText || '- ยังไม่มีประวัติเซอร์วิส',
       tripPlanText ? `\nแผนการเดินทางที่ผู้ใช้กำลังคำนวณอยู่ในขณะนี้:\n${tripPlanText}` : '',
       '',
       isVoiceMode
         ? 'โหมดสนทนาด้วยเสียงสด: ตอบเป็นภาษาไทยที่ฟังเป็นธรรมชาติ กระชับ ชัดเจน ไม่ยาวเยิ่นเย้อ เหมาะสำหรับการสนทนาโต้ตอบระหว่างขับรถหรือเตรียมออกทริป ไม่ต้องอ่านสัญลักษณ์ markdown เช่น ดอกจัน หรือขีดกลาง'
-        : 'ตอบเป็นภาษาไทยที่อ่านง่าย เป็นระบบ อ้างอิงตัวเลขจริงของรถคันนี้เสมอเมื่อเกี่ยวข้อง และเตือนล่วงหน้าหากระยะทางที่ถามจะทำให้ถึงรอบซ่อมบำรุง',
+        : 'ตอบเป็นภาษาไทยที่อ่านง่าย เป็นระบบ อ้างอิงตัวเลขจริงของรถคันนี้เสมอเมื่อเกี่ยวข้อง และเตือนล่วงหน้าหากระยะทางที่ถามจะทำให้ถึงรอบซ่อมบำรุง หรือหากมี พ.ร.บ./ประกัน/ภาษีใกล้หมดอายุ',
     ]
       .filter(Boolean)
       .join('\n');

@@ -172,10 +172,16 @@ export function mergeImportedPatch(
     cloned.fuelLogs = reconcileFuelLogsWithOdometer(cloned.fuelLogs, {
       odometerLogs: cloned.odometerLogs,
     }).logs;
+    cloned.legalDocuments = Array.isArray(cloned.legalDocuments)
+      ? cloned.legalDocuments
+      : Array.isArray(current.legalDocuments)
+        ? structuredClone(current.legalDocuments)
+        : [];
     return cloned;
   }
 
   const next = structuredClone(current);
+  next.legalDocuments = Array.isArray(next.legalDocuments) ? next.legalDocuments : [];
   const nowStamp = Date.now();
   const patchDate =
     patch.updatedDate && /^\d{4}-\d{2}-\d{2}$/.test(patch.updatedDate)

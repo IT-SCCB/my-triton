@@ -182,6 +182,30 @@ export interface MaintenanceTrendSummary {
   activeMonthCount: number;
 }
 
+export interface MonthlyFuelCostTrendPoint {
+  monthKey: string; // YYYY-MM
+  monthLabel: string; // e.g. พ.ย. 2569
+  shortLabel: string; // e.g. พ.ย. 69
+  totalCost: number;
+  totalLiters: number;
+  totalDistance: number;
+  refillCount: number;
+  avgPricePerLiter: number;
+  momDelta: number | null;
+  momPercent: number | null;
+  isPeakMonth: boolean;
+}
+
+export interface FuelCostTrendSummary {
+  points: MonthlyFuelCostTrendPoint[];
+  totalPeriodCost: number;
+  totalPeriodLiters: number;
+  monthlyAverage: number;
+  activeMonthlyAverage: number;
+  peakMonth: MonthlyFuelCostTrendPoint | null;
+  activeMonthCount: number;
+}
+
 export interface OdometerTrendPoint {
   id: string;
   date: string;
@@ -233,10 +257,49 @@ export interface MonthlyOdometerSummary {
   latestOdometer: number;
 }
 
+export type LegalDocumentType =
+  | 'compulsory_insurance'
+  | 'voluntary_insurance'
+  | 'registration_tax'
+  | 'other';
+
+export type LegalDocumentAlertStatus = 'expired' | 'expiring_soon' | 'valid';
+
+export interface LegalDocuments {
+  id: string;
+  docType: LegalDocumentType;
+  title: string;
+  provider: string;
+  policyNumber: string;
+  issueDate: string; // YYYY-MM-DD
+  expiryDate: string; // YYYY-MM-DD
+  alertDaysBefore: number;
+  alertEnabled: boolean;
+  cost: number;
+  emergencyPhone?: string;
+  imageDataUrl?: string;
+  notes?: string;
+  updatedAt?: string;
+}
+
+export interface LegalDocumentAlertItem {
+  id: string;
+  documentId: string;
+  docType: LegalDocumentType;
+  title: string;
+  provider: string;
+  policyNumber: string;
+  expiryDate: string;
+  alertDaysBefore: number;
+  daysRemaining: number;
+  status: LegalDocumentAlertStatus;
+}
+
 export interface VehicleMaintenanceState {
   vehicle: VehicleProfile;
   services: ServiceRecord[];
   fuelLogs: FuelLogEntry[];
   odometerLogs: OdometerLogEntry[];
   scheduleIntervals: Record<string, number>;
+  legalDocuments?: LegalDocuments[];
 }

@@ -248,6 +248,65 @@ service cloud.firestore {
         && data.updatedAt is timestamp;
     }
 
+    function isValidLegalDocument(data, userId, vehicleId, legalDocId) {
+      return data.keys().hasAll([
+          'id',
+          'ownerId',
+          'vehicleId',
+          'docType',
+          'title',
+          'provider',
+          'policyNumber',
+          'issueDate',
+          'expiryDate',
+          'alertDaysBefore',
+          'alertEnabled',
+          'cost',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'ownerId',
+          'vehicleId',
+          'docType',
+          'title',
+          'provider',
+          'policyNumber',
+          'issueDate',
+          'expiryDate',
+          'alertDaysBefore',
+          'alertEnabled',
+          'cost',
+          'emergencyPhone',
+          'imageDataUrl',
+          'notes',
+          'createdAt',
+          'updatedAt'
+        ])
+        && isValidId(data.id)
+        && data.id == legalDocId
+        && isValidId(data.ownerId)
+        && data.ownerId == userId
+        && data.ownerId == request.auth.uid
+        && isValidId(data.vehicleId)
+        && data.vehicleId == vehicleId
+        && data.docType in ['compulsory_insurance', 'voluntary_insurance', 'registration_tax', 'other']
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 200
+        && data.provider is string && data.provider.size() <= 200
+        && data.policyNumber is string && data.policyNumber.size() <= 120
+        && isValidDateStr(data.issueDate)
+        && isValidDateStr(data.expiryDate)
+        && data.alertDaysBefore is int && data.alertDaysBefore >= 0 && data.alertDaysBefore <= 365
+        && data.alertEnabled is bool
+        && data.cost is number && data.cost >= 0 && data.cost <= 10000000
+        && (!('emergencyPhone' in data) || data.emergencyPhone == null || (data.emergencyPhone is string && data.emergencyPhone.size() <= 60))
+        && (!('imageDataUrl' in data) || data.imageDataUrl == null || (data.imageDataUrl is string && data.imageDataUrl.size() <= 450000))
+        && (!('notes' in data) || data.notes == null || (data.notes is string && data.notes.size() <= 1000))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
     match /users/{userId}/vehicles/{vehicleId} {
       allow get: if isValidId(userId) && isValidId(vehicleId) && isOwner(userId) && (resource == null || existing().ownerId == request.auth.uid);
       allow list: if isValidId(userId) && isOwner(userId) && existing().ownerId == request.auth.uid;
@@ -434,6 +493,57 @@ service cloud.firestore {
         allow delete: if isValidId(userId)
           && isValidId(vehicleId)
           && isValidId(odometerLogId)
+          && isVerifiedUser()
+          && isOwner(userId)
+          && existing().ownerId == request.auth.uid
+          && get(/databases/$(database)/documents/users/$(userId)/vehicles/$(vehicleId)).data.ownerId == request.auth.uid;
+      }
+
+      match /legalDocuments/{legalDocId} {
+        allow get: if isValidId(userId) && isValidId(vehicleId) && isValidId(legalDocId) && isOwner(userId) && (resource == null || existing().ownerId == request.auth.uid);
+        allow list: if isValidId(userId) && isValidId(vehicleId) && isOwner(userId) && existing().ownerId == request.auth.uid;
+
+        allow create: if isValidId(userId)
+          && isValidId(vehicleId)
+          && isValidId(legalDocId)
+          && isVerifiedUser()
+          && isOwner(userId)
+          && isValidLegalDocument(incoming(), userId, vehicleId, legalDocId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && getAfter(/databases/$(database)/documents/users/$(userId)/vehicles/$(vehicleId)).data.ownerId == request.auth.uid;
+
+        allow update: if isValidId(userId)
+          && isValidId(vehicleId)
+          && isValidId(legalDocId)
+          && isVerifiedUser()
+          && isOwner(userId)
+          && isValidLegalDocument(incoming(), userId, vehicleId, legalDocId)
+          && incoming().id == existing().id
+          && incoming().ownerId == existing().ownerId
+          && incoming().vehicleId == existing().vehicleId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && get(/databases/$(database)/documents/users/$(userId)/vehicles/$(vehicleId)).data.ownerId == request.auth.uid
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'docType',
+            'title',
+            'provider',
+            'policyNumber',
+            'issueDate',
+            'expiryDate',
+            'alertDaysBefore',
+            'alertEnabled',
+            'cost',
+            'emergencyPhone',
+            'imageDataUrl',
+            'notes',
+            'updatedAt'
+          ]);
+
+        allow delete: if isValidId(userId)
+          && isValidId(vehicleId)
+          && isValidId(legalDocId)
           && isVerifiedUser()
           && isOwner(userId)
           && existing().ownerId == request.auth.uid

@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import {
+  Calculator,
   Check,
   Cloud,
   CloudCog,
@@ -11,6 +12,7 @@ import {
   Leaf,
   Pencil,
   ScanLine,
+  ShieldCheck,
   Truck,
   Wallet,
   Wrench,
@@ -41,6 +43,9 @@ interface VehicleHeroProps {
   onOpenServiceModal: () => void;
   onOpenSyncModal: () => void;
   onOpenDriveModal: () => void;
+  onOpenLegalDocsModal: () => void;
+  onOpenFuelCalculator: () => void;
+  legalAlertCount?: number;
   cloudUserEmail?: string | null;
   cloudSyncStatus: 'local' | 'connecting' | 'synced' | 'error';
   cloudSyncError?: string | null;
@@ -60,6 +65,9 @@ export function VehicleHero({
   onOpenServiceModal,
   onOpenSyncModal,
   onOpenDriveModal,
+  onOpenLegalDocsModal,
+  onOpenFuelCalculator,
+  legalAlertCount = 0,
   cloudUserEmail,
   cloudSyncStatus,
   cloudSyncError,
@@ -265,6 +273,16 @@ export function VehicleHero({
 
               <button
                 type="button"
+                onClick={onOpenFuelCalculator}
+                data-testid="open-fuel-calculator-btn"
+                className="inline-flex items-center justify-center gap-1.5 min-h-[40px] px-3.5 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                <Calculator className="w-4 h-4 text-emerald-700 dark:text-emerald-400 shrink-0" aria-hidden="true" />
+                <span>คำนวณค่าน้ำมัน</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={onOpenOcrModal}
                 className="inline-flex items-center justify-center gap-1.5 min-h-[40px] px-3.5 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer"
               >
@@ -289,6 +307,32 @@ export function VehicleHero({
               >
                 <HardDrive className="w-4 h-4 text-blue-700 dark:text-blue-400 shrink-0" aria-hidden="true" />
                 <span>Google Drive</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={onOpenLegalDocsModal}
+                data-testid="open-legal-docs-hero-btn"
+                className={`inline-flex items-center justify-center gap-1.5 min-h-[40px] px-3.5 py-2 rounded-lg border text-xs sm:text-sm font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                  legalAlertCount > 0
+                    ? 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/50'
+                    : 'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200'
+                }`}
+              >
+                <ShieldCheck
+                  className={`w-4 h-4 shrink-0 ${
+                    legalAlertCount > 0
+                      ? 'text-amber-600 dark:text-amber-400'
+                      : 'text-blue-700 dark:text-blue-400'
+                  }`}
+                  aria-hidden="true"
+                />
+                <span>พ.ร.บ. / ประกัน &amp; ทะเบียน</span>
+                {legalAlertCount > 0 && (
+                  <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-amber-600 text-white font-mono text-[10px] leading-none font-bold tabular-nums">
+                    {legalAlertCount}
+                  </span>
+                )}
               </button>
 
               <button

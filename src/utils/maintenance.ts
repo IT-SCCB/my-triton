@@ -2,11 +2,13 @@ import type {
   CostSummary,
   FleetHealthBanner,
   FuelAnalyticsSummary,
+  FuelCostTrendSummary,
   FuelLogEntry,
   MaintenanceAlertItem,
   MaintenanceScheduleItem,
   MaintenanceTrendSummary,
   MonthlyCostComparisonPoint,
+  MonthlyFuelCostTrendPoint,
   MonthlyMaintenanceTrendPoint,
   MonthlyOdometerPoint,
   MonthlyOdometerSummary,
@@ -934,6 +936,133 @@ export function computeMaintenanceCostTrend(
     totalPeriodCost,
     monthlyAverage,
     spikeThreshold,
+    peakMonth,
+    activeMonthCount,
+  };
+}
+
+export function computeFuelCostTrend(
+  fuelLogs: FuelLogEntry[],
+  referenceMonth?: string,
+  monthsCount = 12
+): FuelCostTrendSummary {
+  const safeMonthsCount = Math.max(1, Math.floor(monthsCount || 12));
+  const fuelMonths = fuelLogs
+    .map((l) => /^(\d{4}-\d{2})-\d{2}$/.exec(l.date.trim())?.[1] ?? null)
+    .filter((m): m is string => m !== null)
+    .sort();
+
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const latestFuelMonth = fuelMonths[fuelMonths.length - 1] ?? currentMonth;
+  const endMonth =
+    referenceMonth && /^\d{4}-\d{2}$/.test(referenceMonth)
+      ? referenceMonth
+      : latestFuelMonth > currentMonth
+        ? latestFuelMonth
+        : currentMonth;
+
+  const bucketMap = new Map<
+    string,
+    {
+      totalCost: number;
+      totalLiters: number;
+      totalDistance: number;
+      refillCount: number;
+    }
+  >();
+
+  for (const log of fuelLogs) {
+    const match = /^(\d{4}-\d{2})-\d{2}$/.exec(log.date.trim());
+    if (!match) continue;
+    const monthKey = match[1];
+    const amount = Math.max(0, Number(log.amount || 0));
+    const liters = Math.max(0, Number(log.liters || 0));
+    const distance = Math.max(0, Number(log.distance || 0));
+
+    const current = bucketMap.get(monthKey) ?? {
+      totalCost: 0,
+      totalLiters: 0,
+      totalDistance: 0,
+      refillCount: 0,
+    };
+    current.totalCost += Number.isFinite(amount) ? amount : 0;
+    current.totalLiters += Number.isFinite(liters) ? liters : 0;
+    current.totalDistance += Number.isFinite(distance) ? distance : 0;
+    current.refillCount += 1;
+    bucketMap.set(monthKey, current);
+  }
+
+  const keys: string[] = [];
+  for (let i = -(safeMonthsCount - 1); i <= 0; i++) {
+    keys.push(addMonths(endMonth, i));
+  }
+
+  const rawPoints = keys.map((monthKey) => {
+    const bucket = bucketMap.get(monthKey);
+    const totalCost = Math.round(bucket?.totalCost ?? 0);
+    const totalLiters = Number((bucket?.totalLiters ?? 0).toFixed(2));
+    const totalDistance = Math.round(bucket?.totalDistance ?? 0);
+    const refillCount = bucket?.refillCount ?? 0;
+    const avgPricePerLiter =
+      totalLiters > 0 ? Number((totalCost / totalLiters).toFixed(2)) : 0;
+
+    return {
+      monthKey,
+      monthLabel: formatThaiMonthYear(monthKey),
+      shortLabel: formatThaiMonthShortYear(monthKey),
+      totalCost,
+      totalLiters,
+      totalDistance,
+      refillCount,
+      avgPricePerLiter,
+    };
+  });
+
+  const totalPeriodCost = rawPoints.reduce((sum, p) => sum + p.totalCost, 0);
+  const totalPeriodLiters = Number(
+    rawPoints.reduce((sum, p) => sum + p.totalLiters, 0).toFixed(2)
+  );
+  const activeMonths = rawPoints.filter((p) => p.totalCost > 0);
+  const activeMonthCount = activeMonths.length;
+  const monthlyAverage =
+    safeMonthsCount > 0 ? Math.round(totalPeriodCost / safeMonthsCount) : 0;
+  const activeMonthlyAverage =
+    activeMonthCount > 0 ? Math.round(totalPeriodCost / activeMonthCount) : 0;
+
+  let peakCandidateKey: string | null = null;
+  let peakCost = 0;
+  for (const p of activeMonths) {
+    if (p.totalCost > peakCost) {
+      peakCost = p.totalCost;
+      peakCandidateKey = p.monthKey;
+    }
+  }
+
+  const points: MonthlyFuelCostTrendPoint[] = rawPoints.map((p, idx) => {
+    const prev = idx > 0 ? rawPoints[idx - 1] : null;
+    const momDelta = prev ? p.totalCost - prev.totalCost : null;
+    const momPercent =
+      prev && prev.totalCost > 0
+        ? Number((((p.totalCost - prev.totalCost) / prev.totalCost) * 100).toFixed(1))
+        : null;
+    const isPeakMonth = peakCandidateKey !== null && p.monthKey === peakCandidateKey;
+
+    return {
+      ...p,
+      momDelta,
+      momPercent,
+      isPeakMonth,
+    };
+  });
+
+  const peakMonth = points.find((p) => p.isPeakMonth) ?? null;
+
+  return {
+    points,
+    totalPeriodCost,
+    totalPeriodLiters,
+    monthlyAverage,
+    activeMonthlyAverage,
     peakMonth,
     activeMonthCount,
   };

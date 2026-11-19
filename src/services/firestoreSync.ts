@@ -14,6 +14,8 @@ import {
 } from 'firebase/firestore';
 import type {
   FuelLogEntry,
+  LegalDocuments,
+  LegalDocumentType,
   OdometerLogEntry,
   ScheduleKey,
   ServiceCategory,
@@ -244,6 +246,50 @@ function buildOdoDocPayload(
   return { id, payload };
 }
 
+const VALID_LEGAL_DOC_TYPES: LegalDocumentType[] = [
+  'compulsory_insurance',
+  'voluntary_insurance',
+  'registration_tax',
+  'other',
+];
+
+function sanitizeLegalDocType(raw: unknown): LegalDocumentType {
+  if (typeof raw === 'string' && VALID_LEGAL_DOC_TYPES.includes(raw as LegalDocumentType)) {
+    return raw as LegalDocumentType;
+  }
+  return 'other';
+}
+
+function buildLegalDocPayload(
+  userId: string,
+  entry: LegalDocuments,
+  timestamps: { createdAt: FieldValue | unknown; updatedAt: FieldValue }
+) {
+  const id = sanitizeId(entry.id, 'doc');
+  const payload: Record<string, unknown> = {
+    id,
+    ownerId: userId,
+    vehicleId: DEFAULT_VEHICLE_ID,
+    docType: sanitizeLegalDocType(entry.docType),
+    title: clampStr(entry.title, 200, 'เอกสารประจำรถ'),
+    provider: clampStr(entry.provider, 200, ''),
+    policyNumber: clampStr(entry.policyNumber, 120, ''),
+    issueDate: sanitizeDateStr(entry.issueDate),
+    expiryDate: sanitizeDateStr(entry.expiryDate),
+    alertDaysBefore: Math.max(0, Math.min(365, Math.round(entry.alertDaysBefore ?? 30))),
+    alertEnabled: Boolean(entry.alertEnabled),
+    cost: Math.max(0, Math.min(10_000_000, Number(entry.cost || 0))),
+    emergencyPhone: entry.emergencyPhone?.trim() ? clampStr(entry.emergencyPhone, 60) : null,
+    imageDataUrl: entry.imageDataUrl?.trim()
+      ? entry.imageDataUrl.trim().slice(0, 450_000)
+      : null,
+    notes: entry.notes?.trim() ? clampStr(entry.notes, 1000) : null,
+    createdAt: timestamps.createdAt,
+    updatedAt: timestamps.updatedAt,
+  };
+  return { id, payload };
+}
+
 export async function seedVehicleToFirestore(
   userId: string,
   initialState: VehicleMaintenanceState
@@ -294,6 +340,17 @@ export async function seedVehicleToFirestore(
     );
   }
 
+  for (const docItem of initialState.legalDocuments ?? []) {
+    const { id, payload } = buildLegalDocPayload(userId, docItem, {
+      createdAt: now,
+      updatedAt: now,
+    });
+    batch.set(
+      doc(db, 'users', userId, 'vehicles', DEFAULT_VEHICLE_ID, 'legalDocuments', id),
+      payload
+    );
+  }
+
   try {
     await batch.commit();
   } catch (error) {
@@ -314,12 +371,14 @@ export function ensureSeededAndSubscribeToVehicle(
   const servicesPath = `${vehiclePath}/services`;
   const fuelPath = `${vehiclePath}/fuelLogs`;
   const odoPath = `${vehiclePath}/odometerLogs`;
+  const legalDocsPath = `${vehiclePath}/legalDocuments`;
 
   let latestVehicle: { profile: VehicleProfile; scheduleIntervals: Record<string, number> } | null =
     null;
   let latestServices: ServiceRecord[] | null = null;
   let latestFuelLogs: FuelLogEntry[] | null = null;
   let latestOdoLogs: OdometerLogEntry[] | null = null;
+  let latestLegalDocs: LegalDocuments[] | null = null;
 
   function emitIfReady() {
     if (
@@ -327,7 +386,8 @@ export function ensureSeededAndSubscribeToVehicle(
       !latestVehicle ||
       latestServices === null ||
       latestFuelLogs === null ||
-      latestOdoLogs === null
+      latestOdoLogs === null ||
+      latestLegalDocs === null
     ) {
       return;
     }
@@ -343,6 +403,11 @@ export function ensureSeededAndSubscribeToVehicle(
       ),
       odometerLogs: [...latestOdoLogs].sort((a, b) =>
         b.date !== a.date ? b.date.localeCompare(a.date) : b.odometer - a.odometer
+      ),
+      legalDocuments: [...latestLegalDocs].sort((a, b) =>
+        a.expiryDate !== b.expiryDate
+          ? a.expiryDate.localeCompare(b.expiryDate)
+          : a.title.localeCompare(b.title)
       ),
     });
   }
@@ -485,6 +550,40 @@ export function ensureSeededAndSubscribeToVehicle(
         (error) => {
           try {
             handleFirestoreError(error, OperationType.LIST, odoPath);
+          } catch (wrapped) {
+            if (!cancelled) onError(wrapped as Error);
+          }
+        }
+      )
+    );
+
+    unsubscribers.push(
+      onSnapshot(
+        query(collection(db, legalDocsPath), where('ownerId', '==', userId)),
+        (snap) => {
+          latestLegalDocs = snap.docs.map((docSnap) => {
+            const d = docSnap.data();
+            return {
+              id: String(d.id ?? docSnap.id),
+              docType: sanitizeLegalDocType(d.docType),
+              title: String(d.title ?? ''),
+              provider: String(d.provider ?? ''),
+              policyNumber: String(d.policyNumber ?? ''),
+              issueDate: String(d.issueDate ?? getTodayIsoDate()),
+              expiryDate: String(d.expiryDate ?? getTodayIsoDate()),
+              alertDaysBefore: Number(d.alertDaysBefore ?? 30),
+              alertEnabled: Boolean(d.alertEnabled ?? true),
+              cost: Number(d.cost ?? 0),
+              emergencyPhone: d.emergencyPhone ? String(d.emergencyPhone) : undefined,
+              imageDataUrl: d.imageDataUrl ? String(d.imageDataUrl) : undefined,
+              notes: d.notes ? String(d.notes) : undefined,
+            };
+          });
+          emitIfReady();
+        },
+        (error) => {
+          try {
+            handleFirestoreError(error, OperationType.LIST, legalDocsPath);
           } catch (wrapped) {
             if (!cancelled) onError(wrapped as Error);
           }
@@ -927,6 +1026,43 @@ export async function fsSyncFullState(
     }
   }
 
+  const nextLegalDocs = nextState.legalDocuments ?? [];
+  const prevLegalDocs = previousState.legalDocuments ?? [];
+  const nextLegalIds = new Set(nextLegalDocs.map((d) => sanitizeId(d.id, 'doc')));
+  const prevLegalIds = new Set(prevLegalDocs.map((d) => sanitizeId(d.id, 'doc')));
+  for (const prevId of prevLegalIds) {
+    if (!nextLegalIds.has(prevId)) {
+      ops.push((batch) => batch.delete(doc(db, `${vehiclePath}/legalDocuments/${prevId}`)));
+    }
+  }
+  for (const item of nextLegalDocs) {
+    const id = sanitizeId(item.id, 'doc');
+    if (prevLegalIds.has(id)) {
+      ops.push((batch) =>
+        batch.update(doc(db, `${vehiclePath}/legalDocuments/${id}`), {
+          docType: sanitizeLegalDocType(item.docType),
+          title: clampStr(item.title, 200, 'เอกสารประจำรถ'),
+          provider: clampStr(item.provider, 200, ''),
+          policyNumber: clampStr(item.policyNumber, 120, ''),
+          issueDate: sanitizeDateStr(item.issueDate),
+          expiryDate: sanitizeDateStr(item.expiryDate),
+          alertDaysBefore: Math.max(0, Math.min(365, Math.round(item.alertDaysBefore ?? 30))),
+          alertEnabled: Boolean(item.alertEnabled),
+          cost: Math.max(0, Math.min(10_000_000, Number(item.cost || 0))),
+          emergencyPhone: item.emergencyPhone?.trim() ? clampStr(item.emergencyPhone, 60) : null,
+          imageDataUrl: item.imageDataUrl?.trim()
+            ? item.imageDataUrl.trim().slice(0, 450_000)
+            : null,
+          notes: item.notes?.trim() ? clampStr(item.notes, 1000) : null,
+          updatedAt: now,
+        })
+      );
+    } else {
+      const { payload } = buildLegalDocPayload(userId, item, { createdAt: now, updatedAt: now });
+      ops.push((batch) => batch.set(doc(db, `${vehiclePath}/legalDocuments/${id}`), payload));
+    }
+  }
+
   try {
     const CHUNK = 400;
     for (let i = 0; i < ops.length; i += CHUNK) {
@@ -938,6 +1074,64 @@ export async function fsSyncFullState(
     }
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, vehiclePath);
+  }
+}
+
+export async function fsSaveLegalDocument(
+  userId: string,
+  entry: LegalDocuments,
+  isEdit: boolean
+): Promise<void> {
+  const id = sanitizeId(entry.id, 'doc');
+  const path = `users/${userId}/vehicles/${DEFAULT_VEHICLE_ID}/legalDocuments/${id}`;
+  const now = serverTimestamp();
+
+  if (isEdit) {
+    try {
+      await updateDoc(doc(db, path), {
+        docType: sanitizeLegalDocType(entry.docType),
+        title: clampStr(entry.title, 200, 'เอกสารประจำรถ'),
+        provider: clampStr(entry.provider, 200, ''),
+        policyNumber: clampStr(entry.policyNumber, 120, ''),
+        issueDate: sanitizeDateStr(entry.issueDate),
+        expiryDate: sanitizeDateStr(entry.expiryDate),
+        alertDaysBefore: Math.max(0, Math.min(365, Math.round(entry.alertDaysBefore ?? 30))),
+        alertEnabled: Boolean(entry.alertEnabled),
+        cost: Math.max(0, Math.min(10_000_000, Number(entry.cost || 0))),
+        emergencyPhone: entry.emergencyPhone?.trim() ? clampStr(entry.emergencyPhone, 60) : null,
+        imageDataUrl: entry.imageDataUrl?.trim()
+          ? entry.imageDataUrl.trim().slice(0, 450_000)
+          : null,
+        notes: entry.notes?.trim() ? clampStr(entry.notes, 1000) : null,
+        updatedAt: now,
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, path);
+    }
+    return;
+  }
+
+  const { payload } = buildLegalDocPayload(userId, entry, {
+    createdAt: now,
+    updatedAt: now,
+  });
+  try {
+    await setDoc(doc(db, path), payload);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, path);
+  }
+}
+
+export async function fsDeleteLegalDocument(
+  userId: string,
+  legalDocId: string
+): Promise<void> {
+  const id = sanitizeId(legalDocId, 'doc');
+  const path = `users/${userId}/vehicles/${DEFAULT_VEHICLE_ID}/legalDocuments/${id}`;
+  try {
+    await deleteDoc(doc(db, path));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
   }
 }
 

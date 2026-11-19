@@ -9,11 +9,13 @@ import {
   Moon,
   Plus,
   Send,
+  ShieldCheck,
   Sparkles,
   Sun,
 } from 'lucide-react';
-import type { MaintenanceAlertItem } from '../types/maintenance';
-import { ALERT_THRESHOLD_OPTIONS, formatKm } from '../utils/maintenance';
+import type { LegalDocumentAlertItem, MaintenanceAlertItem } from '../types/maintenance';
+import { formatLegalExpiryCountdown } from '../utils/legalDocuments';
+import { ALERT_THRESHOLD_OPTIONS, formatKm, formatThaiDate } from '../utils/maintenance';
 import {
   formatAlertSummaryText,
   type BrowserPermissionState,
@@ -30,6 +32,7 @@ interface TopBarProps {
   onOpenAddFuel: () => void;
   onOpenAiAssistant: () => void;
   alerts: MaintenanceAlertItem[];
+  legalAlerts?: LegalDocumentAlertItem[];
   unacknowledgedCount: number;
   dismissedAlertIds: string[];
   thresholdKm: number;
@@ -42,6 +45,7 @@ interface TopBarProps {
   onDismissAlert: (alertId: string) => void;
   onRestoreDismissedAlerts: () => void;
   onJumpToSchedule: () => void;
+  onOpenLegalDocs?: (docId?: string | null) => void;
 }
 
 const NAV_ITEMS: Array<{ id: ActiveTab; label: string }> = [
@@ -60,6 +64,7 @@ export function TopBar({
   onOpenAddFuel,
   onOpenAiAssistant,
   alerts,
+  legalAlerts = [],
   unacknowledgedCount,
   dismissedAlertIds,
   thresholdKm,
@@ -72,6 +77,7 @@ export function TopBar({
   onDismissAlert,
   onRestoreDismissedAlerts,
   onJumpToSchedule,
+  onOpenLegalDocs,
 }: TopBarProps) {
   const [panelOpen, setPanelOpen] = useState(false);
   const [testStatusMsg, setTestStatusMsg] = useState<string | null>(null);
@@ -100,7 +106,11 @@ export function TopBar({
     };
   }, [panelOpen]);
 
-  const hasOverdue = alerts.some((a) => a.severity === 'overdue');
+  const hasOverdue =
+    alerts.some((a) => a.severity === 'overdue') ||
+    legalAlerts.some((a) => a.status === 'expired');
+  const totalAlertItems = alerts.length + legalAlerts.length;
+  const totalBadgeCount = unacknowledgedCount + legalAlerts.length;
   const dismissedSet = new Set(dismissedAlertIds);
   const dismissedCount = alerts.filter((a) => dismissedSet.has(a.id)).length;
 
@@ -173,10 +183,10 @@ export function TopBar({
               onClick={() => setPanelOpen((prev) => !prev)}
               aria-expanded={panelOpen}
               aria-haspopup="dialog"
-              aria-label={`ศูนย์แจ้งเตือนซ่อมบำรุง (${alerts.length} รายการ)`}
+              aria-label={`ศูนย์แจ้งเตือนซ่อมบำรุงและเอกสารรถ (${totalAlertItems} รายการ)`}
               data-testid="notification-bell-btn"
               className={`relative inline-flex items-center justify-center min-w-[40px] min-h-[40px] px-2.5 rounded-lg border transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 ${
-                alerts.length > 0
+                totalAlertItems > 0
                   ? hasOverdue
                     ? 'border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/50 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/50'
                     : 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50'
@@ -184,7 +194,7 @@ export function TopBar({
               }`}
             >
               <Bell className="w-4 h-4 shrink-0" aria-hidden="true" />
-              {unacknowledgedCount > 0 ? (
+              {totalBadgeCount > 0 ? (
                 <span
                   data-testid="notification-badge-count"
                   className={`ml-1.5 font-mono text-xs font-semibold tabular-nums ${
@@ -193,14 +203,14 @@ export function TopBar({
                       : 'text-amber-900 dark:text-amber-300'
                   }`}
                 >
-                  {unacknowledgedCount}
+                  {totalBadgeCount}
                 </span>
-              ) : alerts.length > 0 ? (
+              ) : totalAlertItems > 0 ? (
                 <span
                   data-testid="notification-badge-count"
                   className="ml-1.5 font-mono text-xs font-medium tabular-nums text-slate-600 dark:text-slate-300"
                 >
-                  {alerts.length}
+                  {totalAlertItems}
                 </span>
               ) : null}
             </button>
@@ -333,15 +343,60 @@ export function TopBar({
                 </div>
 
                 {/* Alert items */}
-                <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
-                  {alerts.length === 0 ? (
+                <div className="max-h-80 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
+                  {legalAlerts.map((legalAlert) => {
+                    const isExpired = legalAlert.status === 'expired';
+                    return (
+                      <div
+                        key={legalAlert.id}
+                        data-testid={`notification-legal-${legalAlert.documentId}`}
+                        className="p-3.5 space-y-2 bg-white dark:bg-slate-900"
+                      >
+                        <div className="flex items-start gap-2 min-w-0">
+                          <ShieldCheck
+                            className={`w-4 h-4 mt-0.5 shrink-0 ${
+                              isExpired
+                                ? 'text-red-600 dark:text-red-400'
+                                : 'text-amber-600 dark:text-amber-400'
+                            }`}
+                            aria-hidden="true"
+                          />
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                              {legalAlert.title}
+                            </p>
+                            <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+                              {formatLegalExpiryCountdown(legalAlert.daysRemaining)} · หมดอายุ{' '}
+                              {formatThaiDate(legalAlert.expiryDate, 'short')}
+                            </p>
+                          </div>
+                        </div>
+                        {onOpenLegalDocs && (
+                          <div className="flex items-center justify-end">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPanelOpen(false);
+                                onOpenLegalDocs(legalAlert.documentId);
+                              }}
+                              className="px-2.5 py-1 rounded bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-white text-white dark:text-slate-900 text-[11px] font-medium cursor-pointer"
+                            >
+                              ดูเอกสาร / ต่ออายุ
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {totalAlertItems === 0 ? (
                     <div className="p-6 text-center space-y-1.5">
                       <CheckCircle2
                         className="w-6 h-6 text-emerald-600 dark:text-emerald-400 mx-auto"
                         aria-hidden="true"
                       />
                       <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
-                        ยังไม่มีรายการเข้าใกล้กำหนดซ่อม
+                        ยังไม่มีรายการเข้าใกล้กำหนดซ่อมหรือหมดอายุ
                       </p>
                       <p className="text-xs text-slate-500 dark:text-slate-400">
                         ทุกรายการยังมีระยะคงเหลือมากกว่า {formatKm(thresholdKm)} กม.

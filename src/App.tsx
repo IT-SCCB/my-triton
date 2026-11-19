@@ -3,11 +3,14 @@ import type { User } from 'firebase/auth';
 import { RotateCcw } from 'lucide-react';
 import { AiAssistantDrawer } from './components/AiAssistantDrawer';
 import { AnalyticsSection } from './components/AnalyticsSection';
+import { FuelCalculator } from './components/FuelCalculator';
 import { FuelFormModal } from './components/FuelFormModal';
 import { FuelHistorySection } from './components/FuelHistorySection';
 import { GitHubSyncStatus } from './components/GitHubSyncStatus';
 import { GoogleDriveModal } from './components/GoogleDriveModal';
 import { GoogleSheetsSyncModal } from './components/GoogleSheetsSyncModal';
+import { LegalDocumentsDashboardCard } from './components/LegalDocumentsDashboardCard';
+import { LegalDocumentsModal } from './components/LegalDocumentsModal';
 import { MaintenanceAlertToast } from './components/MaintenanceAlertToast';
 import { MonthlyMaintenanceChart } from './components/MonthlyMaintenanceChart';
 import { OcrScannerModal } from './components/OcrScannerModal';
@@ -28,8 +31,10 @@ import {
   fsBatchUpdateFuelLogs,
   fsCreateOrResetVehicleWithBatch,
   fsDeleteFuelLog,
+  fsDeleteLegalDocument,
   fsDeleteService,
   fsResetServiceCycle,
+  fsSaveLegalDocument,
   fsSaveService,
   fsUpdateFuelGauge,
   fsUpdateFuelLog,
@@ -56,6 +61,7 @@ import {
 } from './services/googleSheetsSync';
 import type {
   FuelLogEntry,
+  LegalDocuments,
   NotificationPreferences,
   OcrExtractedFuelData,
   ScheduleKey,
@@ -67,6 +73,7 @@ import {
   mergeImportedPatch,
   type ImportedVehiclePatch,
 } from './utils/driveParser';
+import { evaluateLegalDocumentAlerts } from './utils/legalDocuments';
 import {
   buildMaintenanceSchedules,
   computeCostSummary,
@@ -114,6 +121,7 @@ function readCachedLocalState(): VehicleMaintenanceState | null {
           ...parsed.vehicle,
           imageUrl: normalizeVehicleImageUrl(parsed.vehicle.imageUrl),
         },
+        legalDocuments: Array.isArray(parsed.legalDocuments) ? parsed.legalDocuments : [],
       };
     }
   } catch {
@@ -128,7 +136,8 @@ function isIdenticalToSeed(candidate: VehicleMaintenanceState): boolean {
     candidate.vehicle.fuelPercent === SEED_VEHICLE_STATE.vehicle.fuelPercent &&
     candidate.services.length === SEED_VEHICLE_STATE.services.length &&
     candidate.fuelLogs.length === SEED_VEHICLE_STATE.fuelLogs.length &&
-    candidate.odometerLogs.length === SEED_VEHICLE_STATE.odometerLogs.length
+    candidate.odometerLogs.length === SEED_VEHICLE_STATE.odometerLogs.length &&
+    (candidate.legalDocuments?.length ?? 0) === 0
   );
 }
 
@@ -165,11 +174,14 @@ export default function App() {
   const [serviceModalOpen, setServiceModalOpen] = useState(false);
   const [editingService, setEditingService] = useState<ServiceRecord | null>(null);
   const [fuelModalOpen, setFuelModalOpen] = useState(false);
+  const [fuelCalculatorOpen, setFuelCalculatorOpen] = useState(false);
   const [editingFuelLog, setEditingFuelLog] = useState<FuelLogEntry | null>(null);
   const [ocrPrefill, setOcrPrefill] = useState<OcrExtractedFuelData | null>(null);
   const [ocrModalOpen, setOcrModalOpen] = useState(false);
   const [syncModalOpen, setSyncModalOpen] = useState(false);
   const [driveModalOpen, setDriveModalOpen] = useState(false);
+  const [legalModalOpen, setLegalModalOpen] = useState(false);
+  const [legalSelectedDocId, setLegalSelectedDocId] = useState<string | null>(null);
   const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
   const [aiDrawerMode, setAiDrawerMode] = useState<'chat' | 'voice'>('chat');
   const [activeTripEstimate, setActiveTripEstimate] = useState<TripPlanEstimate | null>(null);
@@ -938,6 +950,74 @@ export default function App() {
     }
   }
 
+  async function handleSaveLegalDocument(docItem: LegalDocuments, isEdit: boolean) {
+    if (authUser) {
+      pendingFirestorePushRef.current = true;
+      try {
+        await fsSaveLegalDocument(authUser.uid, docItem, isEdit);
+        return;
+      } catch (err) {
+        pendingFirestorePushRef.current = false;
+        setCloudSyncError(formatCloudErrorMessage(err));
+      }
+    }
+
+    const endpoint = isEdit ? `/api/legal-documents/${docItem.id}` : '/api/legal-documents';
+    const method = isEdit ? 'PATCH' : 'POST';
+    try {
+      const res = await apiFetch(endpoint, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(docItem),
+      });
+      if (!res.ok) throw new Error('Failed to save legal document');
+      const next = (await res.json()) as VehicleMaintenanceState;
+      commitState(next, { autoPush: true });
+    } catch {
+      const existingDocs = state.legalDocuments ?? [];
+      const nextDocs = isEdit
+        ? existingDocs.map((d) => (d.id === docItem.id ? docItem : d))
+        : [docItem, ...existingDocs];
+      commitState(
+        {
+          ...state,
+          legalDocuments: [...nextDocs].sort((a, b) =>
+            a.expiryDate.localeCompare(b.expiryDate)
+          ),
+        },
+        { autoPush: true }
+      );
+    }
+  }
+
+  async function handleDeleteLegalDocument(docId: string) {
+    if (authUser) {
+      pendingFirestorePushRef.current = true;
+      try {
+        await fsDeleteLegalDocument(authUser.uid, docId);
+        return;
+      } catch (err) {
+        pendingFirestorePushRef.current = false;
+        setCloudSyncError(formatCloudErrorMessage(err));
+      }
+    }
+
+    try {
+      const res = await apiFetch(`/api/legal-documents/${docId}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to delete legal document');
+      const next = (await res.json()) as VehicleMaintenanceState;
+      commitState(next, { autoPush: true });
+    } catch {
+      commitState(
+        {
+          ...state,
+          legalDocuments: (state.legalDocuments ?? []).filter((d) => d.id !== docId),
+        },
+        { autoPush: true }
+      );
+    }
+  }
+
   async function handleUpdateScheduleInterval(key: string, intervalKm: number) {
     const nextIntervals = {
       ...state.scheduleIntervals,
@@ -1178,6 +1258,8 @@ export default function App() {
     state.scheduleIntervals,
     notificationPrefs.thresholdKm
   );
+  const legalDocuments = state.legalDocuments ?? [];
+  const legalDocumentAlerts = evaluateLegalDocumentAlerts(legalDocuments);
   const unacknowledgedAlerts = maintenanceAlerts.filter(
     (a) => !notificationPrefs.dismissedAlertIds.includes(a.id)
   );
@@ -1329,6 +1411,7 @@ export default function App() {
           setAiDrawerOpen(true);
         }}
         alerts={maintenanceAlerts}
+        legalAlerts={legalDocumentAlerts}
         unacknowledgedCount={unacknowledgedAlerts.length}
         dismissedAlertIds={notificationPrefs.dismissedAlertIds}
         thresholdKm={notificationPrefs.thresholdKm}
@@ -1356,6 +1439,10 @@ export default function App() {
         onDismissAlert={handleDismissAlert}
         onRestoreDismissedAlerts={handleRestoreDismissedAlerts}
         onJumpToSchedule={handleJumpToSchedule}
+        onOpenLegalDocs={(docId) => {
+          setLegalSelectedDocId(docId ?? null);
+          setLegalModalOpen(true);
+        }}
       />
 
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-8">
@@ -1386,11 +1473,25 @@ export default function App() {
                   }}
                   onOpenSyncModal={() => setSyncModalOpen(true)}
                   onOpenDriveModal={() => setDriveModalOpen(true)}
+                  onOpenLegalDocsModal={() => {
+                    setLegalSelectedDocId(null);
+                    setLegalModalOpen(true);
+                  }}
+                  onOpenFuelCalculator={() => setFuelCalculatorOpen(true)}
+                  legalAlertCount={legalDocumentAlerts.length}
                   cloudUserEmail={authUser?.email ?? authUser?.displayName ?? null}
                   cloudSyncStatus={cloudSyncStatus}
                   cloudSyncError={cloudSyncError}
                   onConnectCloud={handleConnectCloud}
                   onDisconnectCloud={handleDisconnectCloud}
+                />
+
+                <LegalDocumentsDashboardCard
+                  documents={legalDocuments}
+                  onOpenModal={(docId) => {
+                    setLegalSelectedDocId(docId ?? null);
+                    setLegalModalOpen(true);
+                  }}
                 />
 
                 <AnalyticsSection
@@ -1615,6 +1716,14 @@ export default function App() {
         onSubmit={handleSaveFuelLog}
       />
 
+      <FuelCalculator
+        isOpen={fuelCalculatorOpen}
+        fuelStats={fuelStats}
+        tankCapacityLiters={state.vehicle.tankCapacityLiters}
+        fuelPercent={state.vehicle.fuelPercent}
+        onClose={() => setFuelCalculatorOpen(false)}
+      />
+
       <ServiceFormModal
         isOpen={serviceModalOpen}
         editingService={editingService}
@@ -1656,6 +1765,18 @@ export default function App() {
         onApplyPatch={handleApplyDrivePatch}
       />
 
+      <LegalDocumentsModal
+        isOpen={legalModalOpen}
+        documents={legalDocuments}
+        initialSelectedDocId={legalSelectedDocId}
+        onClose={() => {
+          setLegalModalOpen(false);
+          setLegalSelectedDocId(null);
+        }}
+        onSaveDocument={handleSaveLegalDocument}
+        onDeleteDocument={handleDeleteLegalDocument}
+      />
+
       <AiAssistantDrawer
         isOpen={aiDrawerOpen}
         initialMode={aiDrawerMode}
@@ -1664,6 +1785,7 @@ export default function App() {
         fuelStats={fuelStats}
         schedules={schedules}
         activeTrip={activeTripEstimate}
+        legalDocuments={legalDocuments}
         recentServices={[...state.services]
           .sort((a, b) =>
             b.date !== a.date ? b.date.localeCompare(a.date) : b.odometer - a.odometer

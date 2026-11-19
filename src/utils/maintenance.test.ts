@@ -550,3 +550,37 @@ test('computeMonthlyOdometerSummary aggregates monthly readings, peak driving mo
   assert.equal(empty.peakDistanceMonth, null);
   assert.equal(empty.averageMonthlyDistanceKm, 0);
 });
+
+test('computeFuelCostTrend aggregates monthly fuel spending, liters, MoM changes, and peak month', async () => {
+  const { computeFuelCostTrend } = await import('./maintenance');
+
+  const trend = computeFuelCostTrend(SEED_VEHICLE_STATE.fuelLogs, '2026-11', 6);
+  assert.equal(trend.points.length, 6);
+  assert.equal(trend.points[0].monthKey, '2026-06');
+  assert.equal(trend.points[5].monthKey, '2026-11');
+  assert.equal(trend.totalPeriodCost, 2700);
+  assert.equal(trend.totalPeriodLiters, 77.31);
+  assert.equal(trend.activeMonthCount, 2);
+  assert.equal(trend.monthlyAverage, 450);
+  assert.equal(trend.activeMonthlyAverage, 1350);
+  assert.equal(trend.peakMonth?.monthKey, '2026-11');
+  assert.equal(trend.peakMonth?.totalCost, 2200);
+
+  const oct = trend.points.find((p) => p.monthKey === '2026-10');
+  const nov = trend.points.find((p) => p.monthKey === '2026-11');
+  assert.ok(oct && nov);
+  assert.equal(oct.totalCost, 500);
+  assert.equal(oct.refillCount, 1);
+  assert.equal(oct.isPeakMonth, false);
+  assert.equal(nov.totalCost, 2200);
+  assert.equal(nov.refillCount, 2);
+  assert.equal(nov.momDelta, 1700);
+  assert.equal(nov.momPercent, 340);
+  assert.equal(nov.isPeakMonth, true);
+
+  const emptyTrend = computeFuelCostTrend([], '2026-11', 6);
+  assert.equal(emptyTrend.points.length, 6);
+  assert.equal(emptyTrend.totalPeriodCost, 0);
+  assert.equal(emptyTrend.activeMonthCount, 0);
+  assert.equal(emptyTrend.peakMonth, null);
+});

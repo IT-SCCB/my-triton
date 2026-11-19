@@ -48,6 +48,14 @@ export interface AssistantChatContext {
   }>;
   activeTrip: unknown;
   recentServices?: AssistantRecentService[];
+  legalDocumentsSummary?: Array<{
+    title: string;
+    docType: string;
+    provider: string;
+    policyNumber: string;
+    expiryDate: string;
+    daysRemaining: number | null;
+  }>;
 }
 
 const NO_KEY_MESSAGE =
@@ -87,9 +95,18 @@ export function buildAssistantSystemInstructionForClient(
       ? JSON.stringify(ctx.activeTrip)
       : null;
 
+  const legalDocsText = (ctx.legalDocumentsSummary ?? [])
+    .map(
+      (d) =>
+        `- ${d.title} (${d.docType}): หน่วยงาน ${d.provider || '-'}, เลขที่ ${d.policyNumber || '-'}, หมดอายุ ${d.expiryDate}${
+          d.daysRemaining !== null ? ` (เหลือ ${d.daysRemaining} วัน)` : ''
+        }`
+    )
+    .join('\n');
+
   return [
     `คุณคือ "ผู้ช่วยช่างและวางแผนทริปประจำรถอ้วนพี" สำหรับรถกระบะ ${ctx.vehicleMake} ${ctx.vehicleModel} ปี ${ctx.vehicleYear} (${ctx.engineSpec})`,
-    'หน้าที่ของคุณคือตอบคำถามเรื่องการบำรุงรักษารถยนต์ การวางแผนเดินทาง คำนวณค่าน้ำมัน การเช็กรายการอะไหล่ตามระยะไมล์ และคำแนะนำด้านเทคนิคของเครื่องยนต์ดีเซล 2.5 DI-D อย่างเป็นกันเอง ชัดเจน และแม่นยำเป็นภาษาไทย',
+    'หน้าที่ของคุณคือตอบคำถามเรื่องการบำรุงรักษารถยนต์ การวางแผนเดินทาง คำนวณค่าน้ำมัน การเช็กรายการอะไหล่ตามระยะไมล์ เอกสาร พ.ร.บ. ประกันภัย ทะเบียน/ภาษีรถยนต์ และคำแนะนำด้านเทคนิคของเครื่องยนต์ดีเซล 2.5 DI-D อย่างเป็นกันเอง ชัดเจน และแม่นยำเป็นภาษาไทย',
     '',
     'ข้อมูลรถล่าสุดจากสมุดบันทึก:',
     `- เลขไมล์ปัจจุบัน: ${ctx.currentOdometer.toLocaleString('th-TH')} กม. (อัปเดต ${ctx.lastUpdatedDate})`,
@@ -99,6 +116,9 @@ export function buildAssistantSystemInstructionForClient(
     'ตารางซ่อมบำรุงตามระยะที่กำลังติดตาม:',
     schedulesText,
     '',
+    'เอกสาร พ.ร.บ. / ประกันภัย / ทะเบียนรถ:',
+    legalDocsText || '- ยังไม่มีเอกสารที่บันทึกไว้',
+    '',
     'ประวัติเซอร์วิสล่าสุด:',
     servicesText || '- ยังไม่มีประวัติเซอร์วิส',
     tripPlanText
@@ -107,7 +127,7 @@ export function buildAssistantSystemInstructionForClient(
     '',
     isVoiceMode
       ? 'โหมดสนทนาด้วยเสียงสด: ตอบเป็นภาษาไทยที่ฟังเป็นธรรมชาติ กระชับ ชัดเจน ไม่ยาวเยิ่นเย้อ เหมาะสำหรับการสนทนาโต้ตอบระหว่างขับรถหรือเตรียมออกทริป ไม่ต้องอ่านสัญลักษณ์ markdown เช่น ดอกจัน หรือขีดกลาง'
-      : 'ตอบเป็นภาษาไทยที่อ่านง่าย เป็นระบบ อ้างอิงตัวเลขจริงของรถคันนี้เสมอเมื่อเกี่ยวข้อง และเตือนล่วงหน้าหากระยะทางที่ถามจะทำให้ถึงรอบซ่อมบำรุง',
+      : 'ตอบเป็นภาษาไทยที่อ่านง่าย เป็นระบบ อ้างอิงตัวเลขจริงของรถคันนี้เสมอเมื่อเกี่ยวข้อง และเตือนล่วงหน้าหากระยะทางที่ถามจะทำให้ถึงรอบซ่อมบำรุง หรือหากมี พ.ร.บ./ประกัน/ภาษีใกล้หมดอายุ',
   ]
     .filter(Boolean)
     .join('\n');

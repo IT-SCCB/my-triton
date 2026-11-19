@@ -16,9 +16,11 @@ import {
 } from 'lucide-react';
 import type {
   FuelAnalyticsSummary,
+  LegalDocuments,
   MaintenanceScheduleItem,
   VehicleProfile,
 } from '../types/maintenance';
+import { computeDaysUntilExpiry, LEGAL_DOC_TYPE_LABELS } from '../utils/legalDocuments';
 import type { TripPlanEstimate } from '../utils/tripPlanner';
 import { STATIC_MODE } from '../utils/serverApi';
 import {
@@ -68,6 +70,7 @@ interface AiAssistantDrawerProps {
   schedules: MaintenanceScheduleItem[];
   activeTrip: TripPlanEstimate | null;
   recentServices?: AssistantRecentService[];
+  legalDocuments?: LegalDocuments[];
   onClose: () => void;
 }
 
@@ -138,6 +141,7 @@ export function AiAssistantDrawer({
   schedules,
   activeTrip,
   recentServices = [],
+  legalDocuments = [],
   onClose,
 }: AiAssistantDrawerProps) {
   const [mode, setMode] = useState<'chat' | 'voice'>(initialMode);
@@ -215,8 +219,16 @@ export function AiAssistantDrawer({
       schedulesSummary: vc.schedulesSummary,
       activeTrip: vc.activeTrip,
       recentServices,
+      legalDocumentsSummary: legalDocuments.map((d) => ({
+        title: d.title,
+        docType: LEGAL_DOC_TYPE_LABELS[d.docType],
+        provider: d.provider,
+        policyNumber: d.policyNumber,
+        expiryDate: d.expiryDate,
+        daysRemaining: computeDaysUntilExpiry(d.expiryDate),
+      })),
     };
-  }, [vehicle, buildVehicleContext, recentServices]);
+  }, [vehicle, buildVehicleContext, recentServices, legalDocuments]);
 
   const stopPlaybackQueue = useCallback(() => {
     for (const src of activePlaybackSourcesRef.current) {

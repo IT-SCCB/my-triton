@@ -198,4 +198,5 @@ export const SEED_VEHICLE_STATE: VehicleMaintenanceState = {
       note: 'แก้ไขจาก 223,589 กม. เป็น 233,589 กม. เมื่อวันที่ 15 พ.ย. 2569',
     },
   ],
+  legalDocuments: [],
 };
