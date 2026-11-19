@@ -105,6 +105,9 @@ export function OsmMapView({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const layerRef = useRef<L.LayerGroup | null>(null);
+  // ขอบเขตเส้นทางล่าสุด — ResizeObserver ใช้ซูมซ้ำเมื่อกล่องแผนที่เพิ่งมีขนาด
+  const boundsRef = useRef<L.LatLngBounds | null>(null);
+  const lastMapSizeRef = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
   const callbacksRef = useRef({
     onSelectStation,
     onSelectMilestone,
@@ -131,8 +134,29 @@ export function OsmMapView({
     const rafId = requestAnimationFrame(() => {
       map.invalidateSize();
     });
+    // ถ้า fitBounds รอบแรกทำงานตอนกล่องยังวัดขนาดไม่ได้ (0×0) Leaflet จะคำนวณ
+    // ซูมเพี้ยน (NaN) แล้วค้างอยู่ที่มุมมองเริ่มต้น — เฝ้าขนาดกล่องไว้ พอกล่อง
+    // เพิ่งมีขนาดจริงเมื่อไรให้วัดขนาดใหม่แล้วซูมเข้าเส้นทางซ้ำทันที
+    // (ซูมซ้ำเฉพาะตอนกล่องเพิ่งมีขนาดจาก 0 เท่านั้น ไม่ดึงมุมมองผู้ใช้ตอนปรับขนาดหน้าต่าง)
+    const ro = new ResizeObserver((entries) => {
+      const rect = entries[0]?.contentRect;
+      if (!rect) return;
+      const prev = lastMapSizeRef.current;
+      lastMapSizeRef.current = { w: rect.width, h: rect.height };
+      if ((prev.w === 0 || prev.h === 0) && rect.width > 0 && rect.height > 0) {
+        const bounds = boundsRef.current;
+        if (bounds) {
+          map.invalidateSize();
+          map.fitBounds(bounds, { padding: [44, 44] });
+        }
+      } else {
+        map.invalidateSize();
+      }
+    });
+    if (containerRef.current) ro.observe(containerRef.current);
     return () => {
       cancelAnimationFrame(rafId);
+      ro.disconnect();
       map.remove();
       mapRef.current = null;
       layerRef.current = null;
@@ -235,8 +259,11 @@ export function OsmMapView({
     if (endLocation) boundsPoints.push([endLocation.lat, endLocation.lng]);
     // วัดขนาดกล่องใหม่ก่อนคำนวณซูมทุกครั้ง — กัน fitBounds คิดซูมจากกล่อง 0×0
     // (สาเหตุที่แผนที่บนเว็บจริงเปิดมาค้างมุมมองโลก แล้วซูมถูกตอนคลิกสถานี)
+    // เก็บขอบเขตไว้ให้ ResizeObserver ซูมซ้ำได้ถ้ารอบนี้กล่องยังไม่มีขนาด
+    const bounds = L.latLngBounds(boundsPoints);
+    boundsRef.current = bounds;
     map.invalidateSize();
-    map.fitBounds(L.latLngBounds(boundsPoints), { padding: [44, 44] });
+    map.fitBounds(bounds, { padding: [44, 44] });
   }, [
     origin,
     originLabel,
