@@ -118,13 +118,21 @@ export function OsmMapView({
       zoomControl: true,
       scrollWheelZoom: true,
     });
+    // มุมมองเริ่มต้น (กรุงเทพฯ ระดับประเทศ) กันไว้ก่อน — ถ้า fitBounds รอบแรก
+    // ทำงานตอนกล่องแผนที่ยังวัดขนาดไม่ได้ แผนที่จะได้ไม่ค้างอยู่ที่มุมมองโลก
+    map.setView([13.7563, 100.5018], 6);
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '© OpenStreetMap contributors',
     }).addTo(map);
     layerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
+    // ให้ Leaflet วัดขนาดกล่องใหม่หลังเบราว์เซอร์จัดเลย์เอาต์เสร็จ
+    const rafId = requestAnimationFrame(() => {
+      map.invalidateSize();
+    });
     return () => {
+      cancelAnimationFrame(rafId);
       map.remove();
       mapRef.current = null;
       layerRef.current = null;
@@ -225,6 +233,9 @@ export function OsmMapView({
       stations.slice(0, 8).forEach((s) => boundsPoints.push([s.location.lat, s.location.lng]));
     }
     if (endLocation) boundsPoints.push([endLocation.lat, endLocation.lng]);
+    // วัดขนาดกล่องใหม่ก่อนคำนวณซูมทุกครั้ง — กัน fitBounds คิดซูมจากกล่อง 0×0
+    // (สาเหตุที่แผนที่บนเว็บจริงเปิดมาค้างมุมมองโลก แล้วซูมถูกตอนคลิกสถานี)
+    map.invalidateSize();
     map.fitBounds(L.latLngBounds(boundsPoints), { padding: [44, 44] });
   }, [
     origin,
