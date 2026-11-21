@@ -52,6 +52,17 @@ export const TRIP_PRESET_ROUTES: TripPresetRoute[] = [
     note: 'จาก Siam Country Club Bangkok (ถ.บางนา-ตราด อ.บางเสาธง) → ต.ช้างข้าม อ.นายายอาม จ.จันทบุรี (~174 กม.)',
   },
   {
+    id: 'siamcc-oldcourse',
+    label: 'Siam CC บางนา – Old Course พัทยา',
+    origin: 'Siam Country Club Bangkok (บางนา-ตราด)',
+    destination: 'Siam Country Club Old Course (ต.โป่ง อ.บางละมุง)',
+    destinationQuery: 'Siam Country Club Old Course โป่ง บางละมุง ชลบุรี ประเทศไทย',
+    originCoords: { lat: 13.6143643, lng: 100.7913915 },
+    destinationCoords: { lat: 12.9179814, lng: 100.9877539 },
+    oneWayKm: 104,
+    note: 'จาก Siam Country Club Bangkok (ถ.บางนา-ตราด อ.บางเสาธง) → Siam Country Club Old Course (ถ.พรประภา ต.โป่ง อ.บางละมุง จ.ชลบุรี ~104 กม.)',
+  },
+  {
     id: 'bkk-khaoyai',
     label: 'กรุงเทพฯ – เขาใหญ่',
     origin: 'กรุงเทพฯ',

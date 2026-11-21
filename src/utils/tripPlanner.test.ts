@@ -280,3 +280,11 @@ test('TRIP_PRESET_ROUTES includes Siam CC Bang Na to Na Yai Am Chanthaburi route
   assert.deepEqual(preset.destinationCoords, { lat: 12.7550739, lng: 101.8605464 });
 });
 
+test('TRIP_PRESET_ROUTES includes Siam CC Bang Na to Siam Country Club Old Course Pattaya route with exact coordinates', () => {
+  const preset = TRIP_PRESET_ROUTES.find((r) => r.id === 'siamcc-oldcourse');
+  assert.ok(preset, 'Expected siamcc-oldcourse preset to exist');
+  assert.equal(preset.oneWayKm, 104);
+  assert.deepEqual(preset.originCoords, { lat: 13.6143643, lng: 100.7913915 });
+  assert.deepEqual(preset.destinationCoords, { lat: 12.9179814, lng: 100.9877539 });
+});
+
