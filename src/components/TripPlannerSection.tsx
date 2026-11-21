@@ -3,8 +3,10 @@ import {
   AlertTriangle,
   ArrowLeftRight,
   BarChart3,
+  Check,
   CheckCircle2,
   Compass,
+  Download,
   Fuel,
   Gauge,
   MapPin,
@@ -37,11 +39,13 @@ import {
   type RouteStationsApiResponse,
 } from '../utils/clientOsm';
 import {
+  buildTripExportFilename,
   calculateTripEstimate,
   computeAnnualFuelCostForecast,
   DRIVING_CONDITION_CONFIG,
   evaluateTripMaintenanceImpacts,
   extractDestinationFromRouteName,
+  formatTripEstimateAsText,
   TRIP_PRESET_ROUTES,
   type DrivingCondition,
   type FuelPriceTrendMode,
@@ -158,6 +162,7 @@ export function TripPlannerSection({
   const [locationLabel, setLocationLabel] = useState<string>('ตำแหน่ง GPS ปัจจุบัน');
   const [isFallbackLocation, setIsFallbackLocation] = useState<boolean>(false);
   const [forecastTrendMode, setForecastTrendMode] = useState<FuelPriceTrendMode>('auto');
+  const [exportedFeedback, setExportedFeedback] = useState<boolean>(false);
 
   useEffect(() => {
     if (!kmlDirty && fuelStats.avgKml > 0) {
@@ -362,6 +367,35 @@ export function TripPlannerSection({
     );
   }
 
+  function handleExportTripText() {
+    const content = formatTripEstimateAsText({
+      estimate,
+      roundTrip,
+      drivingCondition,
+      fuelPricePerLiter: parsedPrice,
+      bufferPercent,
+      tankCapacityLiters,
+      fuelPercent,
+      currentOdometer,
+      maintenanceImpacts,
+    });
+    const filename = buildTripExportFilename(estimate.routeLabel);
+    const blob = new Blob([`\uFEFF${content}`], {
+      type: 'text/plain;charset=utf-8',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+    setExportedFeedback(true);
+    window.setTimeout(() => setExportedFeedback(false), 2500);
+  }
+
   return (
     <section aria-labelledby="trip-planner-heading" className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
@@ -395,6 +429,26 @@ export function TripPlannerSection({
           >
             <Navigation className="w-4 h-4 text-emerald-400 dark:text-emerald-200 shrink-0" aria-hidden="true" />
             <span>ค้นหาปั๊มน้ำมันใกล้เคียง</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleExportTripText}
+            disabled={estimate.totalDistanceKm <= 0}
+            data-testid="trip-export-txt-btn"
+            className="inline-flex items-center justify-center gap-1.5 min-h-[40px] px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 text-slate-700 dark:text-slate-200 text-sm font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+          >
+            {exportedFeedback ? (
+              <>
+                <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" aria-hidden="true" />
+                <span>ดาวน์โหลด .txt แล้ว</span>
+              </>
+            ) : (
+              <>
+                <Download className="w-4 h-4 text-slate-500 dark:text-slate-400 shrink-0" aria-hidden="true" />
+                <span>ส่งออกสรุป (.txt)</span>
+              </>
+            )}
           </button>
 
           {onAskAiAboutTrip && (

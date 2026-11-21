@@ -288,3 +288,60 @@ test('TRIP_PRESET_ROUTES includes Siam CC Bang Na to Siam Country Club Old Cours
   assert.deepEqual(preset.destinationCoords, { lat: 12.9179814, lng: 100.9877539 });
 });
 
+test('formatTripEstimateAsText and buildTripExportFilename produce shareable plain-text trip summary', async () => {
+  const { buildTripExportFilename, formatTripEstimateAsText } = await import('./tripPlanner');
+
+  assert.equal(
+    buildTripExportFilename('Siam CC บางนา – Old Course พัทยา', '2026-11-20'),
+    'trip-estimate-siam-cc-old-course-2026-11-20.txt'
+  );
+  assert.equal(
+    buildTripExportFilename('กรุงเทพฯ – พัทยา', '2026-11-20'),
+    'trip-estimate-2026-11-20.txt'
+  );
+
+  const estimate = calculateTripEstimate({
+    routeName: 'กรุงเทพฯ – เชียงใหม่',
+    oneWayDistanceKm: 695,
+    roundTrip: true,
+    baseKml: 12.67,
+    drivingCondition: 'highway',
+    fuelPricePerLiter: 33.55,
+    bufferPercent: 10,
+    extraCostBaht: 250,
+    currentOdometer: 233850,
+    tankCapacityLiters: 75,
+    fuelPercent: 55,
+  });
+
+  const text = formatTripEstimateAsText({
+    estimate,
+    roundTrip: true,
+    drivingCondition: 'highway',
+    fuelPricePerLiter: 33.55,
+    bufferPercent: 10,
+    tankCapacityLiters: 75,
+    fuelPercent: 55,
+    currentOdometer: 233850,
+    maintenanceImpacts: [
+      {
+        key: 'engine_oil',
+        label: 'น้ำมันเครื่อง',
+        nextDueKm: 243589,
+        currentRemainingKm: 9739,
+        remainingAfterTripKm: 8349,
+        becomesOverdueDuringTrip: false,
+        becomesWarningDuringTrip: true,
+      },
+    ],
+    exportedAtIso: '2026-11-20',
+  });
+
+  assert.ok(text.includes('เส้นทาง: กรุงเทพฯ – เชียงใหม่'));
+  assert.ok(text.includes('ไป-กลับ (×2)'));
+  assert.ok(text.includes('1,390 กม.'));
+  assert.ok(text.includes('ค่าทางด่วน/ค่าจอดรถเพิ่มเติม: 250 บาท'));
+  assert.ok(text.includes('ต้องเติมเพิ่มอย่างน้อย'));
+  assert.ok(text.includes('น้ำมันเครื่อง: จะเหลืออีก 8,349 กม.'));
+});
+

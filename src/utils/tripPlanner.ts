@@ -896,3 +896,113 @@ export function computeAnnualFuelCostForecast(params: {
   };
 }
 
+export interface FormatTripExportParams {
+  estimate: TripPlanEstimate;
+  roundTrip: boolean;
+  drivingCondition: DrivingCondition;
+  fuelPricePerLiter: number;
+  bufferPercent: number;
+  tankCapacityLiters: number;
+  fuelPercent: number;
+  currentOdometer: number;
+  maintenanceImpacts: TripMaintenanceImpact[];
+  exportedAtIso?: string;
+}
+
+export function buildTripExportFilename(
+  routeLabel: string,
+  dateIso?: string
+): string {
+  const datePart =
+    dateIso && /^\d{4}-\d{2}-\d{2}$/.test(dateIso)
+      ? dateIso
+      : new Date().toISOString().slice(0, 10);
+  const asciiSlug = routeLabel
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 32);
+  return asciiSlug
+    ? `trip-estimate-${asciiSlug}-${datePart}.txt`
+    : `trip-estimate-${datePart}.txt`;
+}
+
+export function formatTripEstimateAsText(params: FormatTripExportParams): string {
+  const {
+    estimate,
+    roundTrip,
+    drivingCondition,
+    fuelPricePerLiter,
+    bufferPercent,
+    tankCapacityLiters,
+    fuelPercent,
+    currentOdometer,
+    maintenanceImpacts,
+    exportedAtIso,
+  } = params;
+
+  const fmtNum = (val: number, decimals = 0) =>
+    new Intl.NumberFormat('th-TH', {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    }).format(val);
+
+  const exportDate = exportedAtIso ?? new Date().toISOString().slice(0, 10);
+  const conditionCfg = DRIVING_CONDITION_CONFIG[drivingCondition];
+
+  const lines: string[] = [
+    '====================================================',
+    'สรุปประมาณการค่าใช้จ่ายและวางแผนทริปเดินทาง',
+    '====================================================',
+    `วันที่บันทึก: ${exportDate}`,
+    `เส้นทาง: ${estimate.routeLabel}`,
+    `รูปแบบ: ${roundTrip ? 'ไป-กลับ (×2)' : 'เที่ยวเดียว'}`,
+    `ระยะทางขาเดียว: ${fmtNum(estimate.oneWayDistanceKm)} กม.`,
+    `ระยะทางรวม: ${fmtNum(estimate.totalDistanceKm)} กม.`,
+    `สภาพเส้นทาง: ${conditionCfg.label} (${conditionCfg.adjustmentLabel})`,
+    '',
+    '--- ประมาณการน้ำมันและงบประมาณ ---',
+    `อัตราสิ้นเปลืองที่ใช้คำนวณ: ${estimate.effectiveKml.toFixed(2)} กม./ลิตร`,
+    `ราคาน้ำมันคาดการณ์: ${fuelPricePerLiter.toFixed(2)} บาท/ลิตร`,
+    `เผื่อน้ำมันสำรอง/รถติด: +${bufferPercent}%`,
+    `ปริมาณน้ำมันที่ใช้ (ดิบ): ${estimate.rawLitersNeeded.toFixed(1)} ลิตร`,
+    `ปริมาณน้ำมันรวมเผื่อสำรอง: ${estimate.bufferedLitersNeeded.toFixed(1)} ลิตร`,
+    `ค่าน้ำมันโดยประมาณ: ${fmtNum(estimate.estimatedFuelCostBaht)} บาท`,
+  ];
+
+  if (estimate.extraCostBaht > 0) {
+    lines.push(`ค่าทางด่วน/ค่าจอดรถเพิ่มเติม: ${fmtNum(estimate.extraCostBaht)} บาท`);
+  }
+
+  lines.push(
+    `ค่าใช้จ่ายรวมทั้งทริป: ${fmtNum(estimate.totalTripCostBaht)} บาท`,
+    `ต้นทุนเฉลี่ยต่อระยะทาง: ${estimate.costPerKm.toFixed(2)} บาท/กม.`,
+    '',
+    '--- ความพร้อมน้ำมันในถัง ---',
+    `น้ำมันปัจจุบัน: ${fuelPercent}% (~${estimate.currentTankLiters.toFixed(1)} / ${tankCapacityLiters} ลิตร)`,
+    `ระยะทางที่วิ่งได้ก่อนถึงขีดสำรอง (~10 ล.): ~${fmtNum(estimate.estimatedCurrentRangeKm)} กม.`,
+    estimate.canCompleteWithCurrentFuel
+      ? 'สถานะ: น้ำมันในถังปัจจุบันเพียงพอสำหรับทริปนี้'
+      : `สถานะ: ต้องเติมเพิ่มอย่างน้อย ${estimate.additionalLitersToBuy.toFixed(1)} ลิตร (~${fmtNum(estimate.additionalRefuelCostBaht)} บาท · แวะเติม ~${estimate.refuelStopsNeeded} ครั้ง)`,
+    '',
+    '--- เช็กกำหนดซ่อมบำรุง ---',
+    `เลขไมล์ปัจจุบัน: ${fmtNum(currentOdometer)} กม.`,
+    `เลขไมล์คาดการณ์หลังจบทริป: ~${fmtNum(estimate.projectedEndOdometer)} กม.`
+  );
+
+  if (maintenanceImpacts.length === 0) {
+    lines.push('สถานะซ่อมบำรุง: ทุกรายการยังมีระยะคงเหลือเพียงพอสำหรับทริปนี้');
+  } else {
+    lines.push('รายการที่ต้องเฝ้าระวังระหว่างทริป:');
+    for (const impact of maintenanceImpacts) {
+      const detail = impact.becomesOverdueDuringTrip
+        ? `จะเกินกำหนด ${fmtNum(Math.abs(impact.remainingAfterTripKm))} กม.`
+        : `จะเหลืออีก ${fmtNum(impact.remainingAfterTripKm)} กม.`;
+      lines.push(`- ${impact.label}: ${detail} (ครบระยะที่ ${fmtNum(impact.nextDueKm)} กม.)`);
+    }
+  }
+
+  lines.push('====================================================');
+  return lines.join('\n');
+}
+
